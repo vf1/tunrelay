@@ -1,0 +1,26 @@
+system:
+  ip_forward: true
+relays:
+  - ingress:
+      type: tun
+      name: tun10
+      cidr: "10.0.0.2/24"
+      peer: "10.0.0.1"
+    egress:
+      type: udp
+      dial: "localhost:4000"
+      password: "pass"
+  - ingress:
+      type: udp
+      listen: "localhost:4000"
+      password: "pass"
+    egress:
+      type: tun
+      name: tun11
+      cidr: "10.0.1.2/24"
+      peer: "10.0.1.1"
+      nat:
+        forward:
+          src: "10.0.1.1"
+        backward:
+          dst: "10.0.0.2"
