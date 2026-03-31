@@ -14,11 +14,17 @@ type Config struct {
 type System struct {
 	IPForward    bool         `yaml:"ip_forward"`
 	DefaultRoute DefaultRoute `yaml:"default_route"`
+	Masquerade   Masquerade   `yaml:"masquerade"`
 }
 
 type DefaultRoute struct {
 	Tun    string `yaml:"tun"`
 	Except string `yaml:"except"`
+}
+
+type Masquerade struct {
+	SAddr   string `yaml:"saddr"`
+	OIFName string `yaml:"oifname"`
 }
 
 type Relay struct {

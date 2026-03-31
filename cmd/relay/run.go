@@ -43,8 +43,8 @@ func waitForSigterm() {
 
 func setupSystem(cfg config.System) (func(), error) {
 	var orig int
+	var err error
 	if cfg.IPForward {
-		var err error
 		orig, err = sysctl.IPForward()
 		if err != nil {
 			return nil, fmt.Errorf("get ip_forward: %w", err)
@@ -63,11 +63,24 @@ func setupSystem(cfg config.System) (func(), error) {
 		}()
 	}
 
+	if cfg.Masquerade.SAddr != "" {
+		err = tunctl.EnableMasquerade(cfg.Masquerade.SAddr, cfg.Masquerade.OIFName)
+		if err != nil {
+			return nil, fmt.Errorf("masquerade: %w", err)
+		}
+		slog.Info("nat masquerade", "saddr", cfg.Masquerade.SAddr)
+		defer func() {
+			if err != nil {
+				_ = tunctl.DisableMasquerade(cfg.Masquerade.SAddr, cfg.Masquerade.OIFName)
+			}
+		}()
+	}
+
 	if cfg.DefaultRoute.Tun != "" {
 		if cfg.DefaultRoute.Except == "" {
 			return nil, fmt.Errorf("route except not specified")
 		}
-		err := tunctl.RouteAllToTun(cfg.DefaultRoute.Tun, cfg.DefaultRoute.Except)
+		err = tunctl.RouteAllToTun(cfg.DefaultRoute.Tun, cfg.DefaultRoute.Except)
 		if err != nil {
 			return nil, fmt.Errorf("default route: %w", err)
 		}
@@ -86,6 +99,13 @@ func setupSystem(cfg config.System) (func(), error) {
 				slog.Error(fmt.Sprintf("set ip_forward: %v", err))
 			}
 			slog.Info("ip_forward disabled")
+		}
+		if cfg.Masquerade.SAddr != "" {
+			err := tunctl.DisableMasquerade(cfg.Masquerade.SAddr, cfg.Masquerade.OIFName)
+			if err != nil {
+				slog.Error(fmt.Sprintf("disable nat masquerade: %v", err))
+			}
+			slog.Info("masquerade disabled")
 		}
 		if cfg.DefaultRoute.Tun != "" {
 			_ = tunctl.DeleteRouteAll(cfg.DefaultRoute.Except)
