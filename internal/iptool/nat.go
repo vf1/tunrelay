@@ -2,7 +2,6 @@ package iptool
 
 import (
 	"errors"
-	"io"
 	"net"
 )
 
@@ -11,46 +10,6 @@ var (
 	ErrTooSmallUdp = errors.New("too small tcp packet")
 	ErrTooSmallTcp = errors.New("too small udp packet")
 )
-
-type NAT struct {
-	io.ReadWriteCloser
-	write NATActions
-	read  NATActions
-}
-
-type NATActions struct {
-	src net.IP
-	dst net.IP
-}
-
-func NewNAT(rwc io.ReadWriteCloser, writeSrc, writeDst, readSrc, readDst net.IP) *NAT {
-	return &NAT{rwc, NATActions{writeSrc, writeDst}, NATActions{readSrc, readDst}}
-}
-
-func (nat *NAT) Read(buf []byte) (n int, err error) {
-	n, err = nat.ReadWriteCloser.Read(buf)
-	if err != nil || nat.read.src == nil && nat.read.dst == nil {
-		return
-	}
-	packet := buf[:n]
-	err = ReplaceIPs(packet, nat.read.src, nat.read.dst)
-	return
-}
-
-func (nat *NAT) Write(packet []byte) (n int, err error) {
-	if nat.write.src != nil || nat.write.dst != nil {
-		err = ReplaceIPs(packet, nat.write.src, nat.write.dst)
-		if err != nil {
-			return
-		}
-	}
-	n, err = nat.ReadWriteCloser.Write(packet)
-	return
-}
-
-func (nat *NAT) Close() error {
-	return nat.ReadWriteCloser.Close()
-}
 
 func ReplaceIPs(packet []byte, newSrc, newDst net.IP) error {
 	if len(packet) < IPHeaderMinSize {

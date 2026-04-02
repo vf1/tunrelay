@@ -46,17 +46,6 @@ type TunIngress struct {
 
 type TunEgress struct {
 	TunEndpoint `yaml:",inline"`
-	NAT         NAT `yaml:"nat"`
-}
-
-type NAT struct {
-	Forward  NATActions `yaml:"forward"`
-	Backward NATActions `yaml:"backward"`
-}
-
-type NATActions struct {
-	Src string `yaml:"src"`
-	Dst string `yaml:"dst"`
 }
 
 type UDPEndpoint struct {
