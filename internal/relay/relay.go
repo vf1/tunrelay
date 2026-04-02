@@ -11,6 +11,7 @@ import (
 	"tunrelay/internal/endpoint/nullep"
 	"tunrelay/internal/endpoint/tunep"
 	"tunrelay/internal/endpoint/udpep"
+	"tunrelay/internal/middlewares/staticnat"
 )
 
 const (
@@ -23,14 +24,21 @@ type Logger interface {
 }
 
 type Relay struct {
-	closers []Endpoint
-	log     Logger
+	items []item
+	log   Logger
+}
+
+type item struct {
+	ingress     Endpoint
+	egress      Endpoint
+	middlewares []Middleware
 }
 
 func NewRelays(cfg []config.Relay, log Logger) (*Relay, error) {
-	var ie []Endpoint
+	relay := Relay{items: make([]item, len(cfg)), log: log}
+	closers := relay.items
 	defer func() {
-		for _, closer := range ie {
+		for _, closer := range closers {
 			err := closer.Close()
 			if err != nil {
 				log.Error("cleanup failed new relay: %w", err)
@@ -40,44 +48,72 @@ func NewRelays(cfg []config.Relay, log Logger) (*Relay, error) {
 
 	for i := len(cfg) - 1; i >= 0; i-- {
 		relayCfg := cfg[i]
+		var err error
 		ingress, err := createIngress(relayCfg.Ingress, log)
 		if err != nil {
 			return nil, fmt.Errorf("create ingress: %w", err)
 		}
-		ie = append(ie, ingress)
+		relay.items[i].ingress = ingress
+
 		egress, err := createEgress(relayCfg.Egress, log)
 		if err != nil {
 			return nil, fmt.Errorf("create egress: %w", err)
 		}
-		ie = append(ie, egress)
+		relay.items[i].egress = egress
+
+		for _, middlewareCfg := range relayCfg.Middlewares {
+			mw, err := createMiddleware(middlewareCfg, log)
+			if err != nil {
+				return nil, fmt.Errorf("create middleware: %w", err)
+			}
+			relay.items[i].middlewares = append(relay.items[i].middlewares, mw)
+		}
 	}
 
-	r := &Relay{ie, log}
-	for i := 0; i < len(ie); i += 2 {
-		r.relay(ie[i], ie[i+1])
+	for _, item := range relay.items {
+		item.relay(log)
 	}
-	ie = nil
+	closers = nil
 
-	return r, nil
+	return &relay, nil
 }
 
 func (r *Relay) Close() error {
-	var err error
-	for _, closer := range r.closers {
-		err1 := closer.Close()
-		if err1 != nil {
-			err = errors.Join(err, err1)
-		}
+	var errs []error
+	for _, item := range r.items {
+		err := item.Close()
+		errs = append(errs, err)
 	}
-	return err
+	return errors.Join(errs...)
 }
 
-func (r *Relay) relay(ingress, egress Endpoint) {
-	go r.pipe(ingress, egress)
-	go r.pipe(egress, ingress)
+func (i *item) Close() error {
+	var err1, err2 error
+	if i.ingress != nil {
+		err2 = i.ingress.Close()
+	}
+	if i.egress != nil {
+		err1 = i.egress.Close()
+	}
+	return errors.Join(err1, err2)
 }
 
-func (r *Relay) pipe(a Endpoint, b Endpoint) {
+func (i *item) relay(log Logger) {
+	var forward, backward []pipeMiddleware
+	for _, mw := range i.middlewares {
+		forward = append(forward, pipeMiddleware{mw.Forward, mw.Name})
+		backward = append(backward, pipeMiddleware{mw.Backward, mw.Name})
+	}
+	go pipe(i.ingress, i.egress, forward, log)
+	go pipe(i.egress, i.ingress, backward, log)
+}
+
+type pipeMiddleware struct {
+	Process func(_ []byte) error
+	Name    func() string
+}
+
+func pipe(a, b Endpoint, middlewares []pipeMiddleware, log Logger) {
 	buf := make([]byte, MaxPacketSize)
 
 	for {
@@ -86,18 +122,26 @@ func (r *Relay) pipe(a Endpoint, b Endpoint) {
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
 			}
-			r.log.Error(fmt.Sprintf("%v read: %v", a.Name(), err))
+			log.Error(fmt.Sprintf("%v read: %v", a.Name(), err))
 			continue
 		}
 
 		packet := buf[:n]
+
+		for _, mw := range middlewares {
+			err = mw.Process(packet)
+			if err != nil {
+				log.Error(fmt.Sprintf("%v process: %v", mw.Name(), err))
+				continue
+			}
+		}
 
 		_, err = b.Write(packet)
 		if err != nil {
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
 			}
-			r.log.Error(fmt.Sprintf("%v write: %v", b.Name(), err))
+			log.Error(fmt.Sprintf("%v write: %v", b.Name(), err))
 			continue
 		}
 	}
@@ -131,5 +175,20 @@ func createEgress(cfg config.EgressEndpoint, log Logger) (Endpoint, error) {
 		return nullep.NewEndpoint("null egress", log), nil
 	default:
 		return nil, fmt.Errorf("unknown egress type")
+	}
+}
+
+type Middleware interface {
+	Forward(packet []byte) error
+	Backward(packet []byte) error
+	Name() string
+}
+
+func createMiddleware(cfg config.Middleware, log Logger) (Middleware, error) {
+	switch m := cfg.Value.(type) {
+	case config.StaticNAT:
+		return staticnat.NewStaticNAT(m, log)
+	default:
+		return nil, fmt.Errorf("unknown middleware type")
 	}
 }

@@ -2,12 +2,12 @@ package iptool
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net"
 )
 
 var (
+	ErrTooSmallIP  = errors.New("too small ip packet")
 	ErrTooSmallUdp = errors.New("too small tcp packet")
 	ErrTooSmallTcp = errors.New("too small udp packet")
 )
@@ -33,13 +33,13 @@ func (nat *NAT) Read(buf []byte) (n int, err error) {
 		return
 	}
 	packet := buf[:n]
-	err = DoNAT(packet, nat.read.src, nat.read.dst)
+	err = ReplaceIPs(packet, nat.read.src, nat.read.dst)
 	return
 }
 
 func (nat *NAT) Write(packet []byte) (n int, err error) {
 	if nat.write.src != nil || nat.write.dst != nil {
-		err = DoNAT(packet, nat.write.src, nat.write.dst)
+		err = ReplaceIPs(packet, nat.write.src, nat.write.dst)
 		if err != nil {
 			return
 		}
@@ -52,9 +52,9 @@ func (nat *NAT) Close() error {
 	return nat.ReadWriteCloser.Close()
 }
 
-func DoNAT(packet []byte, newSrc, newDst net.IP) error {
+func ReplaceIPs(packet []byte, newSrc, newDst net.IP) error {
 	if len(packet) < IPHeaderMinSize {
-		return fmt.Errorf("ip packet less min size")
+		return ErrTooSmallIP
 	}
 
 	var src, dst [4]byte

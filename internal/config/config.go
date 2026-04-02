@@ -28,8 +28,9 @@ type Masquerade struct {
 }
 
 type Relay struct {
-	Ingress IngressEndpoint `yaml:"ingress"`
-	Egress  EgressEndpoint  `yaml:"egress"`
+	Ingress     IngressEndpoint `yaml:"ingress"`
+	Middlewares []Middleware    `yaml:"middlewares"`
+	Egress      EgressEndpoint  `yaml:"egress"`
 }
 
 type TunEndpoint struct {
@@ -73,6 +74,13 @@ type UDPEgress struct {
 	Dial        string `yaml:"dial"`
 }
 
+type StaticNAT struct {
+	ForwardSrc  string `yaml:"forward_src"`
+	ForwardDst  string `yaml:"forward_dst"`
+	BackwardSrc string `yaml:"backward_src"`
+	BackwardDst string `yaml:"backward_dst"`
+}
+
 type NullEndpoint struct {
 }
 
@@ -88,10 +96,16 @@ type EgressEndpoint struct {
 	EndpointValue
 }
 
+type Middleware struct {
+	Value any
+}
+
+type rawType struct {
+	Type string `yaml:"type"`
+}
+
 func (ew *IngressEndpoint) UnmarshalYAML(value *yaml.Node) error {
-	var raw struct {
-		Type string `yaml:"type"`
-	}
+	var raw rawType
 	if err := value.Decode(&raw); err != nil {
 		return err
 	}
@@ -122,9 +136,7 @@ func (ew *IngressEndpoint) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (ew *EgressEndpoint) UnmarshalYAML(value *yaml.Node) error {
-	var raw struct {
-		Type string `yaml:"type"`
-	}
+	var raw rawType
 	if err := value.Decode(&raw); err != nil {
 		return err
 	}
@@ -150,6 +162,25 @@ func (ew *EgressEndpoint) UnmarshalYAML(value *yaml.Node) error {
 		ew.Value = ep
 	default:
 		return fmt.Errorf("unknown endpoint type: %s", raw.Type)
+	}
+	return nil
+}
+
+func (mv *Middleware) UnmarshalYAML(value *yaml.Node) error {
+	var raw rawType
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+
+	switch raw.Type {
+	case "stateless_nat":
+		var m StaticNAT
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		mv.Value = m
+	default:
+		return fmt.Errorf("unknown middleware type: %s", raw.Type)
 	}
 	return nil
 }

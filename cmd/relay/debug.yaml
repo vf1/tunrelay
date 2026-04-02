@@ -8,6 +8,10 @@ relays:
       name: tun10
       cidr: "10.0.0.2/24"
       peer: "10.0.0.1"
+    middlewares:
+      - type: stateless_nat
+        forward_src: "10.0.1.1"
+        backward_dst: "10.0.0.2"
     egress:
       type: udp
       dial: "localhost:4000"
@@ -21,8 +25,3 @@ relays:
       name: tun11
       cidr: "10.0.1.2/24"
       peer: "10.0.1.1"
-      nat:
-        forward:
-          src: "10.0.1.1"
-        backward:
-          dst: "10.0.0.2"

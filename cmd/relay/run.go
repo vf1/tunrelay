@@ -68,7 +68,7 @@ func setupSystem(cfg config.System) (func(), error) {
 		if err != nil {
 			return nil, fmt.Errorf("masquerade: %w", err)
 		}
-		slog.Info("nat masquerade", "saddr", cfg.Masquerade.SAddr)
+		slog.Info("system nat masquerade", "saddr", cfg.Masquerade.SAddr)
 		defer func() {
 			if err != nil {
 				_ = tunctl.DisableMasquerade(cfg.Masquerade.SAddr, cfg.Masquerade.OIFName)
