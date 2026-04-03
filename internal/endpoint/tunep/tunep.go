@@ -1,6 +1,7 @@
 package tunep
 
 import (
+	"context"
 	"io"
 
 	"tunrelay/internal/config"
@@ -41,4 +42,24 @@ func (_ *Ingress) Name() string {
 
 func (_ *Egress) Name() string {
 	return "tun egress"
+}
+
+func (i *Ingress) Read(ctx context.Context, p []byte) (context.Context, int, error) {
+	n, err := i.ReadWriteCloser.Read(p)
+	return ctx, n, err
+}
+
+func (e *Egress) Read(ctx context.Context, p []byte) (context.Context, int, error) {
+	n, err := e.ReadWriteCloser.Read(p)
+	return ctx, n, err
+}
+
+func (i *Ingress) Write(ctx context.Context, p []byte) (context.Context, int, error) {
+	n, err := i.ReadWriteCloser.Write(p)
+	return ctx, n, err
+}
+
+func (e *Egress) Write(ctx context.Context, p []byte) (context.Context, int, error) {
+	n, err := e.ReadWriteCloser.Write(p)
+	return ctx, n, err
 }

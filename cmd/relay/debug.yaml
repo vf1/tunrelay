@@ -8,10 +8,6 @@ relays:
       name: tun10
       cidr: "10.0.0.2/24"
       peer: "10.0.0.1"
-    middlewares:
-      - type: stateless_nat
-        forward_src: "10.0.1.1"
-        backward_dst: "10.0.0.2"
     egress:
       type: udp
       dial: "localhost:4000"
@@ -20,6 +16,14 @@ relays:
       type: udp
       listen: "localhost:4000"
       password: "pass"
+    # middlewares:
+    #   - type: stateless_nat
+    #     forward_src: "10.0.1.1"
+    #     backward_dst: "10.0.0.2"
+    middlewares:
+      - type: nat
+        src_range_start: "10.0.1.1"
+        src_range_end: "10.0.1.250"
     egress:
       type: tun
       name: tun11

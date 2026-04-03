@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"tunrelay/internal/endpoint/nullep"
 	"tunrelay/internal/endpoint/tunep"
 	"tunrelay/internal/endpoint/udpep"
+	"tunrelay/internal/middlewares/nat"
 	"tunrelay/internal/middlewares/staticnat"
 )
 
@@ -109,15 +111,17 @@ func (i *item) relay(log Logger) {
 }
 
 type pipeMiddleware struct {
-	Process func(_ []byte) error
+	Process func(_ context.Context, _ []byte) (context.Context, error)
 	Name    func() string
 }
 
 func pipe(a, b Endpoint, middlewares []pipeMiddleware, log Logger) {
 	buf := make([]byte, MaxPacketSize)
 
+pipe:
 	for {
-		n, err := a.Read(buf)
+		ctx := context.Background()
+		ctx, n, err := a.Read(ctx, buf)
 		if err != nil {
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
@@ -129,14 +133,14 @@ func pipe(a, b Endpoint, middlewares []pipeMiddleware, log Logger) {
 		packet := buf[:n]
 
 		for _, mw := range middlewares {
-			err = mw.Process(packet)
+			ctx, err = mw.Process(ctx, packet)
 			if err != nil {
 				log.Error(fmt.Sprintf("%v process: %v", mw.Name(), err))
-				continue
+				continue pipe
 			}
 		}
 
-		_, err = b.Write(packet)
+		ctx, _, err = b.Write(ctx, packet)
 		if err != nil {
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
@@ -148,7 +152,9 @@ func pipe(a, b Endpoint, middlewares []pipeMiddleware, log Logger) {
 }
 
 type Endpoint interface {
-	io.ReadWriteCloser
+	io.Closer
+	Read(ctx context.Context, p []byte) (context.Context, int, error)
+	Write(ctx context.Context, p []byte) (context.Context, int, error)
 	Name() string
 }
 
@@ -179,8 +185,8 @@ func createEgress(cfg config.EgressEndpoint, log Logger) (Endpoint, error) {
 }
 
 type Middleware interface {
-	Forward(packet []byte) error
-	Backward(packet []byte) error
+	Forward(ctx context.Context, packet []byte) (context.Context, error)
+	Backward(ctx context.Context, packet []byte) (context.Context, error)
 	Name() string
 }
 
@@ -188,6 +194,8 @@ func createMiddleware(cfg config.Middleware, log Logger) (Middleware, error) {
 	switch m := cfg.Value.(type) {
 	case config.StaticNAT:
 		return staticnat.NewStaticNAT(m, log)
+	case config.NAT:
+		return nat.NewNAT(m, log)
 	default:
 		return nil, fmt.Errorf("unknown middleware type")
 	}

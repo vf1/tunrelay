@@ -1,6 +1,7 @@
 package udpep
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -31,31 +32,39 @@ func NewIngress(cfg config.UDPIngress, log Logger) (*Ingress, error) {
 	return &Ingress{conn: conn, pass: cfg.Password, log: log}, nil
 }
 
-func (i *Ingress) Read(b []byte) (int, error) {
+func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, error) {
 	n, raddr, err := i.conn.ReadFrom(b)
 	if err != nil {
-		return 0, err
+		return ctx, 0, err
 	}
 
 	data, err := unpack(b[:n:n], i.pass)
 	if err != nil {
-		return 0, err
+		return ctx, 0, err
 	}
 
 	i.raddr = raddr
+	ctx = WithRemoteAddr(ctx, raddr)
+
 	copy(b, data)
-	return len(data), nil
+
+	return ctx, len(data), nil
 }
 
-func (i *Ingress) Write(b []byte) (int, error) {
-	if i.raddr == nil {
-		return 0, ErrNoPeer
+func (i *Ingress) Write(ctx context.Context, b []byte) (context.Context, int, error) {
+	raddr := RemoteAddr(ctx)
+	if raddr == nil {
+		raddr = i.raddr
+	}
+	if raddr == nil {
+		return ctx, 0, ErrNoPeer
 	}
 
 	i.conn.SetDeadline(time.Now().Add(UDPTimeout))
 	defer i.conn.SetDeadline(time.Time{})
 
-	return i.conn.WriteTo(b, i.raddr)
+	n, err := i.conn.WriteTo(b, raddr)
+	return ctx, n, err
 }
 
 func (i *Ingress) Close() error {
@@ -64,4 +73,18 @@ func (i *Ingress) Close() error {
 
 func (_ *Ingress) Name() string {
 	return "udp ingress"
+}
+
+type remoteAddr struct{}
+
+func RemoteAddr(ctx context.Context) net.Addr {
+	val := ctx.Value(remoteAddr{})
+	if val == nil {
+		return nil
+	}
+	return val.(net.Addr)
+}
+
+func WithRemoteAddr(ctx context.Context, addr net.Addr) context.Context {
+	return context.WithValue(ctx, remoteAddr{}, addr)
 }

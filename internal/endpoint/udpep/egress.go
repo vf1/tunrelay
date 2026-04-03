@@ -1,6 +1,7 @@
 package udpep
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -27,31 +28,32 @@ func NewEgress(cfg config.UDPEgress, log Logger) (*Egress, error) {
 	}, nil
 }
 
-func (e *Egress) Read(b []byte) (int, error) {
+func (e *Egress) Read(ctx context.Context, b []byte) (context.Context, int, error) {
 	conn, err := e.connect()
 	if err != nil {
-		return 0, fmt.Errorf("connect: %w", err)
+		return ctx, 0, fmt.Errorf("connect: %w", err)
 	}
 
-	return conn.Read(b)
+	n, err := conn.Read(b)
+	return ctx, n, err
 }
 
-func (e *Egress) Write(b []byte) (int, error) {
+func (e *Egress) Write(ctx context.Context, b []byte) (context.Context, int, error) {
 	conn, err := e.connect()
 	if err != nil {
-		return 0, fmt.Errorf("connect: %w", err)
+		return ctx, 0, fmt.Errorf("connect: %w", err)
 	}
 
 	bb, err := pack(b, e.pass)
 	if err != nil {
-		return 0, fmt.Errorf("pack: %w", err)
+		return ctx, 0, fmt.Errorf("pack: %w", err)
 	}
 
 	conn.SetDeadline(time.Now().Add(UDPTimeout))
 	defer conn.SetDeadline(time.Time{})
 
 	n, err := bb.WriteTo(conn)
-	return int(n), err
+	return ctx, int(n), err
 }
 
 func (e *Egress) Close() error {

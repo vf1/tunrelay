@@ -2,6 +2,7 @@ package iptool
 
 import (
 	"encoding/binary"
+	"net"
 )
 
 const (
@@ -30,6 +31,11 @@ func Src(ip []byte) [4]byte {
 	return addr
 }
 
+func SrcIPv4(ip []byte) net.IP {
+	ipb := Src(ip)
+	return net.IPv4(ipb[0], ipb[1], ipb[2], ipb[3])
+}
+
 func PutDst(ip []byte, addr [4]byte) {
 	copy(ip[DstOffset:], addr[:])
 }
@@ -38,6 +44,11 @@ func Dst(ip []byte) [4]byte {
 	var addr [4]byte
 	copy(addr[:], ip[DstOffset:])
 	return addr
+}
+
+func DstIPv4(ip []byte) net.IP {
+	ipb := Dst(ip)
+	return net.IPv4(ipb[0], ipb[1], ipb[2], ipb[3])
 }
 
 func PutIPChecksum(ip []byte, cs uint16) {

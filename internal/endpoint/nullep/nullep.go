@@ -1,5 +1,7 @@
 package nullep
 
+import "context"
+
 type Endpoing struct {
 	EPName string
 }
@@ -13,11 +15,11 @@ func NewEndpoint(name string, log Logger) *Endpoing {
 	return &Endpoing{EPName: name}
 }
 
-func (_ *Endpoing) Read(b []byte) (int, error) {
+func (_ *Endpoing) Read(ctx context.Context, b []byte) (context.Context, int, error) {
 	select {}
 }
 
-func (_ *Endpoing) Write(b []byte) (int, error) {
+func (_ *Endpoing) Write(ctx context.Context, b []byte) (context.Context, int, error) {
 	select {}
 }
 

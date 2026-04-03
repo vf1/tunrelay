@@ -1,6 +1,7 @@
 package staticnat
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -41,12 +42,12 @@ func NewStaticNAT(cfg config.StaticNAT, log Logger) (*StaticNAT, error) {
 	}, nil
 }
 
-func (n *StaticNAT) Forward(packet []byte) error {
-	return iptool.ReplaceIPs(packet, n.forwardSrc, n.forwardDst)
+func (n *StaticNAT) Forward(ctx context.Context, packet []byte) (context.Context, error) {
+	return ctx, iptool.ReplaceIPs(packet, n.forwardSrc, n.forwardDst)
 }
 
-func (n *StaticNAT) Backward(packet []byte) error {
-	return iptool.ReplaceIPs(packet, n.backwardSrc, n.backwardDst)
+func (n *StaticNAT) Backward(ctx context.Context, packet []byte) (context.Context, error) {
+	return ctx, iptool.ReplaceIPs(packet, n.backwardSrc, n.backwardDst)
 }
 
 func (_ *StaticNAT) Name() string {

@@ -70,6 +70,11 @@ type StaticNAT struct {
 	BackwardDst string `yaml:"backward_dst"`
 }
 
+type NAT struct {
+	SrcRangeStart string `yaml:"src_range_start"`
+	SrcRangeEnd   string `yaml:"src_range_end"`
+}
+
 type NullEndpoint struct {
 }
 
@@ -164,6 +169,12 @@ func (mv *Middleware) UnmarshalYAML(value *yaml.Node) error {
 	switch raw.Type {
 	case "stateless_nat":
 		var m StaticNAT
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		mv.Value = m
+	case "nat":
+		var m NAT
 		if err := value.Decode(&m); err != nil {
 			return err
 		}
