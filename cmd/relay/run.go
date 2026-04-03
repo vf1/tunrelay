@@ -93,7 +93,7 @@ func setupSystem(cfg config.System) (func(), error) {
 			return
 		}
 		runned = true
-		if orig != 1 {
+		if cfg.IPForward && orig != 1 {
 			err := sysctl.SetIPForward(orig)
 			if err != nil {
 				slog.Error(fmt.Sprintf("set ip_forward: %v", err))

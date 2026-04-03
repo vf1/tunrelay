@@ -101,7 +101,7 @@ func DisableMasquerade(saddr, oifname string) error {
 }
 
 func nftCommand(action, saddr, oifname string) string {
-	if oifname == "" {
+	if oifname != "" {
 		return fmt.Sprintf("nft %s rule ip nat postrouting ip saddr %s oifname \"%s\" masquerade", action, saddr, oifname)
 	}
 	return fmt.Sprintf("nft %s rule ip nat postrouting ip saddr %s masquerade", action, saddr)
