@@ -22,8 +22,8 @@ relays:
     #     backward_dst: "10.0.0.2"
     middlewares:
       - type: nat
-        src_range_start: "10.0.1.1"
-        src_range_end: "10.0.1.250"
+        src_range_start: "10.0.1.10" # darwin 10.0.1.1
+        src_range_end: "10.0.1.250"  # darwin 10.0.1.1
     egress:
       type: tun
       name: tun11
