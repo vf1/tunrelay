@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"tunrelay/internal/config"
 	"tunrelay/internal/endpoint/udpep"
@@ -29,6 +30,7 @@ type item struct {
 	remoteAddr net.Addr
 	newSrc     net.IP
 	oldSrc     net.IP
+	updatedAt  time.Time
 }
 
 func NewNAT(cfg config.NAT, log Logger) (*NAT, error) {
@@ -70,9 +72,13 @@ func (n *NAT) Forward(ctx context.Context, packet []byte) (context.Context, erro
 	if found {
 		newSrc = rec.newSrc
 	} else {
-		newSrc = n.nextSrc()
+		var err error
+		newSrc, err = n.nextSrc()
+		if err != nil {
+			return ctx, err
+		}
 	}
-	rec = item{remoteAddr, newSrc, oldSrc}
+	rec = item{remoteAddr, newSrc, oldSrc, time.Now()}
 	n.addrsByNewSrc[[4]byte(newSrc.To4())] = rec
 	n.addrsByRemote[remoteAddr.String()] = rec
 	n.mu.Unlock()
@@ -99,14 +105,23 @@ func (_ *NAT) Name() string {
 	return "nat"
 }
 
-func (n *NAT) nextSrc() net.IP {
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, n.srcCurrent)
+func (n *NAT) nextSrc() (net.IP, error) {
+	start := n.srcCurrent
+	for {
+		ip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(ip, n.srcCurrent)
 
-	n.srcCurrent++
-	if n.srcCurrent == n.srcRangeEnd {
-		n.srcCurrent = n.srcRangeStart
+		n.srcCurrent++
+		if n.srcCurrent == n.srcRangeEnd {
+			n.srcCurrent = n.srcRangeStart
+		}
+
+		if item, found := n.addrsByNewSrc[[4]byte(ip.To4())]; !found || time.Since(item.updatedAt) > time.Hour {
+			return ip, nil
+		}
+
+		if n.srcCurrent == start {
+			return net.IP{}, fmt.Errorf("no free src found")
+		}
 	}
-
-	return ip
 }
