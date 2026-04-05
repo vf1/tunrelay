@@ -90,56 +90,13 @@ func calcNewAddr(oldAddr [4]byte, newAddr netip.Prefix) [4]byte {
 }
 
 func ReplaceIPs(packet []byte, newSrc, newDst net.IP) error {
-	if len(packet) < IPHeaderMinSize {
-		return ErrTooSmallIP
-	}
-
-	var src, dst [4]byte
+	var newSrcPrefix, newDstPrefix netip.Prefix
 	if newSrc != nil {
-		src = Src(packet)
-		PutSrc(packet, [4]byte(newSrc.To4()))
+		newSrcPrefix = netip.PrefixFrom(netip.AddrFrom4([4]byte(newSrc.To4())), 32)
 	}
 	if newDst != nil {
-		dst = Dst(packet)
-		PutDst(packet, [4]byte(newDst.To4()))
-	}
-	if newSrc != nil || newDst != nil {
-		cs := IPChecksum(packet)
-		PutIPChecksum(packet, cs)
+		newDstPrefix = netip.PrefixFrom(netip.AddrFrom4([4]byte(newDst.To4())), 32)
 	}
 
-	protocol := packet[ProtocolOffset]
-	switch protocol {
-	case ProtocolTcp:
-		tcpPacket := packet[IPHeaderSize(packet):]
-		if len(tcpPacket) < TCPHeaderMinSize {
-			return ErrTooSmallTcp
-		}
-		checksum := TCPChecksum(tcpPacket)
-		if newSrc != nil {
-			checksum = RecalcTCPChecksumIP(checksum, src, [4]byte(newSrc.To4()))
-		}
-		if newDst != nil {
-			checksum = RecalcTCPChecksumIP(checksum, dst, [4]byte(newDst.To4()))
-		}
-		PutTCPChecksum(tcpPacket, checksum)
-
-	case ProtocolUdp:
-		udpPacket := packet[IPHeaderSize(packet):]
-		if len(udpPacket) < UdpChecksummOffset+2 {
-			return ErrTooSmallUdp
-		}
-		checksum := UDPChecksum(udpPacket)
-		if checksum != 0 {
-			if newSrc != nil {
-				checksum = RecalcTCPChecksumIP(checksum, src, [4]byte(newSrc.To4()))
-			}
-			if newDst != nil {
-				checksum = RecalcTCPChecksumIP(checksum, dst, [4]byte(newDst.To4()))
-			}
-			PutUDPChecksum(udpPacket, checksum)
-		}
-	}
-
-	return nil
+	return ReplaceAddrs(packet, newSrcPrefix, newDstPrefix)
 }
