@@ -67,6 +67,8 @@ func (n *NAT) Forward(ctx context.Context, packet []byte) (context.Context, erro
 	oldSrc := iptool.SrcIPv4(packet)
 
 	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	var newSrc net.IP
 	rec, found := n.addrsByRemote[remoteAddr.String()]
 	if found {
@@ -81,7 +83,6 @@ func (n *NAT) Forward(ctx context.Context, packet []byte) (context.Context, erro
 	rec = item{remoteAddr, newSrc, oldSrc, time.Now()}
 	n.addrsByNewSrc[[4]byte(newSrc.To4())] = rec
 	n.addrsByRemote[remoteAddr.String()] = rec
-	n.mu.Unlock()
 
 	return ctx, iptool.ReplaceIPs(packet, newSrc, nil)
 }
