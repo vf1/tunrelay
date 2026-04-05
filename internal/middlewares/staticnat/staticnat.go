@@ -3,7 +3,7 @@ package staticnat
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/netip"
 
 	"tunrelay/internal/config"
 	"tunrelay/internal/iptool"
@@ -14,10 +14,10 @@ type Logger interface {
 }
 
 type StaticNAT struct {
-	forwardSrc  net.IP
-	forwardDst  net.IP
-	backwardSrc net.IP
-	backwardDst net.IP
+	forwardSrc  netip.Prefix
+	forwardDst  netip.Prefix
+	backwardSrc netip.Prefix
+	backwardDst netip.Prefix
 }
 
 func NewStaticNAT(cfg config.StaticNAT, log Logger) (*StaticNAT, error) {
@@ -43,35 +43,71 @@ func NewStaticNAT(cfg config.StaticNAT, log Logger) (*StaticNAT, error) {
 }
 
 func (n *StaticNAT) Forward(ctx context.Context, packet []byte) (context.Context, error) {
-	return ctx, iptool.ReplaceIPs(packet, n.forwardSrc, n.forwardDst)
+	return ctx, iptool.ReplaceAddrs(packet, n.forwardSrc, n.forwardDst)
 }
 
 func (n *StaticNAT) Backward(ctx context.Context, packet []byte) (context.Context, error) {
-	return ctx, iptool.ReplaceIPs(packet, n.backwardSrc, n.backwardDst)
+	return ctx, iptool.ReplaceAddrs(packet, n.backwardSrc, n.backwardDst)
 }
 
 func (_ *StaticNAT) Name() string {
 	return "static nat"
 }
 
-func parseNATAddrs(cfg config.StaticNAT) (net.IP, net.IP, net.IP, net.IP, error) {
-	forwardSrc := net.ParseIP(cfg.ForwardSrc)
-	forwardDst := net.ParseIP(cfg.ForwardDst)
-	backwardSrc := net.ParseIP(cfg.BackwardSrc)
-	backwardDst := net.ParseIP(cfg.BackwardDst)
+func parseNATAddrs(cfg config.StaticNAT) (
+	forwardSrc netip.Prefix,
+	forwardDst netip.Prefix,
+	backwardSrc netip.Prefix,
+	backwardDst netip.Prefix,
+	err error,
+) {
+	if cfg.ForwardSrc != "" {
+		forwardSrc, err = netip.ParsePrefix(cfg.ForwardSrc)
+		if err != nil {
+			err = fmt.Errorf("parse nat forward src %v: %w", cfg.ForwardSrc, err)
+			return
+		}
+		if !forwardSrc.Addr().Is4() {
+			err = fmt.Errorf("forward src not ip v4")
+			return
+		}
+	}
 
-	if forwardSrc == nil && cfg.ForwardSrc != "" {
-		return nil, nil, nil, nil, fmt.Errorf("parse nat forward src %v", cfg.ForwardSrc)
-	}
-	if forwardDst == nil && cfg.ForwardDst != "" {
-		return nil, nil, nil, nil, fmt.Errorf("parse nat backward dst %v", cfg.ForwardDst)
-	}
-	if backwardSrc == nil && cfg.BackwardSrc != "" {
-		return nil, nil, nil, nil, fmt.Errorf("parse nat forward src %v", cfg.BackwardSrc)
-	}
-	if backwardDst == nil && cfg.BackwardDst != "" {
-		return nil, nil, nil, nil, fmt.Errorf("parse nat backward dst %v", cfg.BackwardDst)
+	if cfg.ForwardDst != "" {
+		forwardDst, err = netip.ParsePrefix(cfg.ForwardDst)
+		if err != nil {
+			err = fmt.Errorf("parse nat forward dst %v: %w", cfg.ForwardDst, err)
+			return
+		}
+		if !forwardDst.Addr().Is4() {
+			err = fmt.Errorf("forward dst not ip v4")
+			return
+		}
 	}
 
-	return forwardSrc, forwardDst, backwardSrc, backwardDst, nil
+	if cfg.BackwardSrc != "" {
+		backwardSrc, err = netip.ParsePrefix(cfg.BackwardSrc)
+		if err != nil {
+			err = fmt.Errorf("parse nat backward src %v: %w", cfg.BackwardSrc, err)
+			return
+		}
+		if !backwardSrc.Addr().Is4() {
+			err = fmt.Errorf("backward src not ip v4")
+			return
+		}
+	}
+
+	if cfg.BackwardDst != "" {
+		backwardDst, err = netip.ParsePrefix(cfg.BackwardDst)
+		if err != nil {
+			err = fmt.Errorf("parse nat backward dst %v: %w", cfg.BackwardDst, err)
+			return
+		}
+		if !backwardDst.Addr().Is4() {
+			err = fmt.Errorf("backward dst not ip v4")
+			return
+		}
+	}
+
+	return
 }
