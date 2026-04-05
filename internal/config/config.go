@@ -63,7 +63,7 @@ type UDPEgress struct {
 	Dial        string `yaml:"dial"`
 }
 
-type StaticNAT struct {
+type ReplaceIP struct {
 	ForwardSrc  string `yaml:"forward_src"`
 	ForwardDst  string `yaml:"forward_dst"`
 	BackwardSrc string `yaml:"backward_src"`
@@ -167,8 +167,8 @@ func (mv *Middleware) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	switch raw.Type {
-	case "stateless_nat":
-		var m StaticNAT
+	case "replace_ip":
+		var m ReplaceIP
 		if err := value.Decode(&m); err != nil {
 			return err
 		}

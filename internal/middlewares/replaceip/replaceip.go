@@ -1,4 +1,4 @@
-package staticnat
+package replaceip
 
 import (
 	"context"
@@ -20,14 +20,14 @@ type StaticNAT struct {
 	backwardDst netip.Prefix
 }
 
-func NewStaticNAT(cfg config.StaticNAT, log Logger) (*StaticNAT, error) {
+func NewReplaceIP(cfg config.ReplaceIP, log Logger) (*StaticNAT, error) {
 	forwardSrc, forwardDst, backwardSrc, backwardDst, err := parseNATAddrs(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	log.Info(
-		"static nat",
+		"replace ip",
 		"forward_src", forwardSrc.String(),
 		"forward_dst", forwardDst.String(),
 		"backward_src", backwardSrc.String(),
@@ -54,7 +54,7 @@ func (_ *StaticNAT) Name() string {
 	return "static nat"
 }
 
-func parseNATAddrs(cfg config.StaticNAT) (
+func parseNATAddrs(cfg config.ReplaceIP) (
 	forwardSrc netip.Prefix,
 	forwardDst netip.Prefix,
 	backwardSrc netip.Prefix,

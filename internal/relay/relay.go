@@ -13,7 +13,7 @@ import (
 	"tunrelay/internal/endpoint/tunep"
 	"tunrelay/internal/endpoint/udpep"
 	"tunrelay/internal/middlewares/nat"
-	"tunrelay/internal/middlewares/staticnat"
+	"tunrelay/internal/middlewares/replaceip"
 )
 
 const (
@@ -192,8 +192,8 @@ type Middleware interface {
 
 func createMiddleware(cfg config.Middleware, log Logger) (Middleware, error) {
 	switch m := cfg.Value.(type) {
-	case config.StaticNAT:
-		return staticnat.NewStaticNAT(m, log)
+	case config.ReplaceIP:
+		return replaceip.NewReplaceIP(m, log)
 	case config.NAT:
 		return nat.NewNAT(m, log)
 	default:

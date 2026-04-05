@@ -17,7 +17,7 @@ relays:
       listen: "localhost:4000"
       password: "pass"
     middlewares:
-      - type: stateless_nat
+      - type: replace_ip
         forward_src: "10.0.1.1/32"
         backward_dst: "10.0.0.2/32"
     egress:
