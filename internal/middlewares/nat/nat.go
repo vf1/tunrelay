@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -34,13 +35,24 @@ type item struct {
 }
 
 func NewNAT(cfg config.NAT, log Logger) (*NAT, error) {
-	startIP := net.ParseIP(cfg.SrcRangeStart)
-	if startIP == nil {
-		return nil, fmt.Errorf("parse src_range_start: %v", cfg.SrcRangeStart)
+	rangeStart := cfg.SrcRangeStart
+	rangeEnd := cfg.SrcRangeEnd
+	if runtime.GOOS == "darwin" {
+		if cfg.SrcRangeStartDarwin != "" {
+			rangeStart = cfg.SrcRangeStartDarwin
+		}
+		if cfg.SrcRangeEndDarwin != "" {
+			rangeEnd = cfg.SrcRangeEndDarwin
+		}
 	}
-	endIP := net.ParseIP(cfg.SrcRangeEnd)
+
+	startIP := net.ParseIP(rangeStart)
+	if startIP == nil {
+		return nil, fmt.Errorf("parse src_range_start: %v", rangeStart)
+	}
+	endIP := net.ParseIP(rangeEnd)
 	if endIP == nil {
-		return nil, fmt.Errorf("parse src_range_end: %v", cfg.SrcRangeEnd)
+		return nil, fmt.Errorf("parse src_range_end: %v", rangeEnd)
 	}
 
 	log.Info(

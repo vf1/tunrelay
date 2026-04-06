@@ -71,8 +71,10 @@ type ReplaceIP struct {
 }
 
 type NAT struct {
-	SrcRangeStart string `yaml:"src_range_start"`
-	SrcRangeEnd   string `yaml:"src_range_end"`
+	SrcRangeStart       string `yaml:"src_range_start"`
+	SrcRangeEnd         string `yaml:"src_range_end"`
+	SrcRangeStartDarwin string `yaml:"src_range_start_darwin"`
+	SrcRangeEndDarwin   string `yaml:"src_range_end_darwin"`
 }
 
 type NullEndpoint struct {
