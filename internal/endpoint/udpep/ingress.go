@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"tunrelay/internal/config"
@@ -13,7 +13,6 @@ import (
 )
 
 type Ingress struct {
-	mu    sync.Mutex
 	conn  *net.UDPConn
 	peers map[[4]byte]*peer
 	log   Logger
@@ -21,7 +20,7 @@ type Ingress struct {
 
 type peer struct {
 	pass  string
-	raddr net.Addr
+	raddr atomic.Pointer[net.Addr]
 }
 
 func NewIngress(cfg config.UDPIngress, log Logger) (*Ingress, error) {
@@ -62,7 +61,7 @@ func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, err
 		return ctx, 0, err
 	}
 
-	i.setRaddr(src, raddr)
+	i.updateRaddr(src, raddr)
 	ctx = withRemoteAddr(ctx, raddr)
 
 	copy(b, data)
@@ -105,20 +104,19 @@ func (i *Ingress) lookupPassword(src [4]byte) (string, bool) {
 
 func (i *Ingress) lookupRaddr(src [4]byte) net.Addr {
 	peer, found := i.peers[src]
-	if !found || peer.raddr == nil {
+	if !found {
 		return nil
 	}
-	return peer.raddr
+	raddr := peer.raddr.Load()
+	return *raddr
 }
 
-func (i *Ingress) setRaddr(src [4]byte, raddr net.Addr) {
+func (i *Ingress) updateRaddr(src [4]byte, raddr net.Addr) {
 	peer, found := i.peers[src]
 	if !found {
 		panic("unexpected src")
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	peer.raddr = raddr
+	peer.raddr.Store(&raddr)
 }
 
 type remoteAddr struct{}
