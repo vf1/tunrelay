@@ -93,24 +93,39 @@ func DeleteRouteAll(exceptIP string) error {
 }
 
 func EnableMasquerade(saddr, oifname string) error {
-	return doCmd(nftCommand("add", saddr, oifname))
+	var err error
+	if err = exec.Command("nft", "add", "table", "ip", "tunrelay_nat").Run(); err != nil {
+		return fmt.Errorf("cmd nft add table: %v", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = DisableMasquerade(saddr, oifname)
+		}
+	}()
+
+	if err = exec.Command(
+		"nft", "add", "chain", "ip", "tunrelay_nat",
+		"postrouting", "{ type nat hook postrouting priority 100 ; }").Run(); err != nil {
+		return fmt.Errorf("cmd nft add chain: %v", err)
+	}
+
+	var cmd string
+	if oifname != "" {
+		cmd = fmt.Sprintf("nft add rule ip tunrelay_nat postrouting ip saddr %s oifname \"%s\" masquerade", saddr, oifname)
+	} else {
+		cmd = fmt.Sprintf("nft add rule ip tunrelay_nat postrouting ip saddr %s masquerade", saddr)
+	}
+	args := strings.Split(cmd, " ")
+	if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
+		return fmt.Errorf("cmd nft add rule: %v", err)
+	}
+
+	return nil
 }
 
 func DisableMasquerade(saddr, oifname string) error {
-	return doCmd(nftCommand("delete", saddr, oifname))
-}
-
-func nftCommand(action, saddr, oifname string) string {
-	if oifname != "" {
-		return fmt.Sprintf("nft %s rule ip nat postrouting ip saddr %s oifname \"%s\" masquerade", action, saddr, oifname)
-	}
-	return fmt.Sprintf("nft %s rule ip nat postrouting ip saddr %s masquerade", action, saddr)
-}
-
-func doCmd(cmd string) error {
-	args := strings.Split(cmd, " ")
-	if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
-		return fmt.Errorf("cmd (%v): %v", cmd, err)
+	if err := exec.Command("nft", "delete", "table", "ip", "tunrelay_nat").Run(); err != nil {
+		return fmt.Errorf("cmd nft delete table: %v", err)
 	}
 	return nil
 }
