@@ -4,20 +4,33 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"tunrelay/internal/config"
 )
 
 type Ingress struct {
-	conn *net.UDPConn
-	pass string
-	log  Logger
+	conn  *net.UDPConn
+	peers map[[4]byte]string
+	log   Logger
 
 	raddr net.Addr
 }
 
 func NewIngress(cfg config.UDPIngress, log Logger) (*Ingress, error) {
+	peers := make(map[[4]byte]string, len(cfg.Peers))
+	for _, peer := range cfg.Peers {
+		addr, err := netip.ParseAddr(peer.SAddr)
+		if err != nil {
+			return nil, fmt.Errorf("parse peer addr (%v): %w", peer.SAddr, err)
+		}
+		if !addr.Is4() {
+			return nil, fmt.Errorf("peer addr is not IPv4: %v", addr)
+		}
+		peers[addr.As4()] = peer.Password
+	}
+
 	addr, err := net.ResolveUDPAddr("udp", cfg.Listen)
 	if err != nil {
 		return nil, fmt.Errorf("resolve addr %v: %w", cfg.Listen, err)
@@ -29,7 +42,7 @@ func NewIngress(cfg config.UDPIngress, log Logger) (*Ingress, error) {
 	}
 
 	log.Info("udp listener", "local", cfg.Listen)
-	return &Ingress{conn: conn, pass: cfg.Password, log: log}, nil
+	return &Ingress{conn: conn, peers: peers, log: log}, nil
 }
 
 func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, error) {
@@ -38,7 +51,7 @@ func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, err
 		return ctx, 0, err
 	}
 
-	data, err := unpack(b[:n:n], i.pass)
+	data, err := unpack(b[:n:n], i.peers)
 	if err != nil {
 		return ctx, 0, err
 	}

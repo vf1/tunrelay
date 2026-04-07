@@ -48,19 +48,21 @@ type TunEgress struct {
 	TunEndpoint `yaml:",inline"`
 }
 
-type UDPEndpoint struct {
-	Type     string `yaml:"type"`
+type UDPIngress struct {
+	Type   string `yaml:"type"`
+	Listen string `yaml:"listen"`
+	Peers  []Peer `yaml:"peers"`
+}
+
+type Peer struct {
+	SAddr    string `yaml:"saddr"`
 	Password string `yaml:"password"`
 }
 
-type UDPIngress struct {
-	UDPEndpoint `yaml:",inline"`
-	Listen      string `yaml:"listen"`
-}
-
 type UDPEgress struct {
-	UDPEndpoint `yaml:",inline"`
-	Dial        string `yaml:"dial"`
+	Type     string `yaml:"type"`
+	Password string `yaml:"password"`
+	Dial     string `yaml:"dial"`
 }
 
 type ReplaceIP struct {

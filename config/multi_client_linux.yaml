@@ -27,7 +27,11 @@ relays:
   - ingress:
       type: udp
       listen: "localhost:4000"
-      password: "pass"
+      peers:
+        - password: "pass"
+          saddr: "10.0.0.3"
+        - password: "pass"
+          saddr: "10.0.0.4"
     middlewares:
       - type: replace_ip
         forward_src: "10.0.1.0/24"

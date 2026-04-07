@@ -15,7 +15,9 @@ relays:
   - ingress:
       type: udp
       listen: "localhost:4000"
-      password: "pass"
+      peers:
+        - password: "pass"
+          saddr: "10.0.0.2"
     middlewares:
       - type: nat
         src_range_start: "10.0.1.10"

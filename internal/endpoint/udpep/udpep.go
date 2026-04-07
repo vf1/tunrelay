@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"tunrelay/internal/iptool"
 )
 
 type Logger interface {
@@ -18,6 +19,7 @@ var (
 	ErrWrongPass   = errors.New("wrong password")
 	ErrSmallPacket = errors.New("empty packet")
 	ErrStalePacket = errors.New("stale packet")
+	ErrUnknownPeer = errors.New("unknown peer")
 )
 
 const (
@@ -42,7 +44,7 @@ func pack(b []byte, pass string) (net.Buffers, error) {
 	return net.Buffers{header, b}, nil
 }
 
-func unpack(packet []byte, pass string) ([]byte, error) {
+func unpack(packet []byte, peers map[[4]byte]string) ([]byte, error) {
 	if len(packet) < HeaderSize {
 		return nil, ErrSmallPacket
 	}
@@ -54,6 +56,12 @@ func unpack(packet []byte, pass string) ([]byte, error) {
 	timestamp := uint32(time.Now().Unix())
 	if timestamp-rtimestamp > MaxTimeDiff && rtimestamp-timestamp > MaxTimeDiff {
 		return nil, ErrStalePacket
+	}
+
+	src := iptool.Src(payload)
+	pass, found := peers[src]
+	if !found {
+		return nil, ErrUnknownPeer
 	}
 
 	hash, err := calcHash(pass, payload, rtimestamp)
