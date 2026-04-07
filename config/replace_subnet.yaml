@@ -3,6 +3,7 @@ system:
   masquerade:
     saddr: "10.0.1.1/24"
 relays:
+  #------------------------
   - ingress:
       type: tun
       name: tun10
@@ -12,6 +13,7 @@ relays:
       type: udp
       dial: "localhost:4000"
       password: "pass"
+  #------------------------
   - ingress:
       type: udp
       listen: "localhost:4000"
