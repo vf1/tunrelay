@@ -28,10 +28,9 @@ type NAT struct {
 }
 
 type item struct {
-	remoteAddr net.Addr
-	newSrc     net.IP
-	oldSrc     net.IP
-	updatedAt  time.Time
+	newSrc    net.IP
+	oldSrc    net.IP
+	updatedAt time.Time
 }
 
 func NewNAT(cfg config.NAT, log Logger) (*NAT, error) {
@@ -92,7 +91,7 @@ func (n *NAT) Forward(ctx context.Context, packet []byte) (context.Context, erro
 			return ctx, err
 		}
 	}
-	rec = item{remoteAddr, newSrc, oldSrc, time.Now()}
+	rec = item{newSrc, oldSrc, time.Now()}
 	n.addrsByNewSrc[[4]byte(newSrc.To4())] = rec
 	n.addrsByRemote[remoteAddr.String()] = rec
 
