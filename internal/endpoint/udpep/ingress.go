@@ -5,30 +5,36 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"tunrelay/internal/config"
+	"tunrelay/internal/iptool"
 )
 
 type Ingress struct {
+	mu    sync.Mutex
 	conn  *net.UDPConn
-	peers map[[4]byte]string
+	peers map[[4]byte]*peer
 	log   Logger
+}
 
+type peer struct {
+	pass  string
 	raddr net.Addr
 }
 
 func NewIngress(cfg config.UDPIngress, log Logger) (*Ingress, error) {
-	peers := make(map[[4]byte]string, len(cfg.Peers))
-	for _, peer := range cfg.Peers {
-		addr, err := netip.ParseAddr(peer.SAddr)
+	peers := make(map[[4]byte]*peer, len(cfg.Peers))
+	for _, peerCfg := range cfg.Peers {
+		addr, err := netip.ParseAddr(peerCfg.SAddr)
 		if err != nil {
-			return nil, fmt.Errorf("parse peer addr (%v): %w", peer.SAddr, err)
+			return nil, fmt.Errorf("parse peer addr (%v): %w", peerCfg.SAddr, err)
 		}
 		if !addr.Is4() {
 			return nil, fmt.Errorf("peer addr is not IPv4: %v", addr)
 		}
-		peers[addr.As4()] = peer.Password
+		peers[addr.As4()] = &peer{pass: peerCfg.Password}
 	}
 
 	addr, err := net.ResolveUDPAddr("udp", cfg.Listen)
@@ -51,13 +57,13 @@ func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, err
 		return ctx, 0, err
 	}
 
-	data, err := unpack(b[:n:n], i.peers)
+	data, src, err := unpack(b[:n:n], i.lookupPassword)
 	if err != nil {
 		return ctx, 0, err
 	}
 
-	i.raddr = raddr
-	ctx = WithRemoteAddr(ctx, raddr)
+	i.setRaddr(src, raddr)
+	ctx = withRemoteAddr(ctx, raddr)
 
 	copy(b, data)
 
@@ -65,10 +71,11 @@ func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, err
 }
 
 func (i *Ingress) Write(ctx context.Context, b []byte) (context.Context, int, error) {
-	raddr := RemoteAddr(ctx)
-	if raddr == nil {
-		raddr = i.raddr
+	if len(b) < HeaderSize {
+		return nil, 0, ErrSmallPacket
 	}
+	src := iptool.Dst(b)
+	raddr := i.lookupRaddr(src)
 	if raddr == nil {
 		return ctx, 0, ErrNoPeer
 	}
@@ -88,6 +95,32 @@ func (_ *Ingress) Name() string {
 	return "udp ingress"
 }
 
+func (i *Ingress) lookupPassword(src [4]byte) (string, bool) {
+	peer, found := i.peers[src]
+	if !found {
+		return "", false
+	}
+	return peer.pass, true
+}
+
+func (i *Ingress) lookupRaddr(src [4]byte) net.Addr {
+	peer, found := i.peers[src]
+	if !found || peer.raddr == nil {
+		return nil
+	}
+	return peer.raddr
+}
+
+func (i *Ingress) setRaddr(src [4]byte, raddr net.Addr) {
+	peer, found := i.peers[src]
+	if !found {
+		panic("unexpected src")
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	peer.raddr = raddr
+}
+
 type remoteAddr struct{}
 
 func RemoteAddr(ctx context.Context) net.Addr {
@@ -98,6 +131,6 @@ func RemoteAddr(ctx context.Context) net.Addr {
 	return val.(net.Addr)
 }
 
-func WithRemoteAddr(ctx context.Context, addr net.Addr) context.Context {
+func withRemoteAddr(ctx context.Context, addr net.Addr) context.Context {
 	return context.WithValue(ctx, remoteAddr{}, addr)
 }

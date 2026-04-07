@@ -109,8 +109,6 @@ func (n *NAT) Backward(ctx context.Context, packet []byte) (context.Context, err
 		return ctx, fmt.Errorf("no addr in table: %v", dst)
 	}
 
-	ctx = udpep.WithRemoteAddr(ctx, item.remoteAddr)
-
 	return ctx, iptool.ReplaceIPs(packet, nil, item.oldSrc)
 }
 

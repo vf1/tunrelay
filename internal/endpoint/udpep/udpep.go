@@ -44,9 +44,10 @@ func pack(b []byte, pass string) (net.Buffers, error) {
 	return net.Buffers{header, b}, nil
 }
 
-func unpack(packet []byte, peers map[[4]byte]string) ([]byte, error) {
+func unpack(packet []byte, lookupPassword func(src [4]byte) (string, bool)) ([]byte, [4]byte, error) {
+	var src [4]byte
 	if len(packet) < HeaderSize {
-		return nil, ErrSmallPacket
+		return nil, src, ErrSmallPacket
 	}
 
 	rtimestamp := binary.BigEndian.Uint32(packet[0:4])
@@ -55,24 +56,24 @@ func unpack(packet []byte, peers map[[4]byte]string) ([]byte, error) {
 
 	timestamp := uint32(time.Now().Unix())
 	if timestamp-rtimestamp > MaxTimeDiff && rtimestamp-timestamp > MaxTimeDiff {
-		return nil, ErrStalePacket
+		return nil, src, ErrStalePacket
 	}
 
-	src := iptool.Src(payload)
-	pass, found := peers[src]
+	src = iptool.Src(payload)
+	pass, found := lookupPassword(src)
 	if !found {
-		return nil, ErrUnknownPeer
+		return nil, src, ErrUnknownPeer
 	}
 
 	hash, err := calcHash(pass, payload, rtimestamp)
 	if err != nil {
-		return nil, fmt.Errorf("calc hash: %w", err)
+		return nil, src, fmt.Errorf("calc hash: %w", err)
 	}
 	if rhash != hash {
-		return nil, ErrWrongPass
+		return nil, src, ErrWrongPass
 	}
 
-	return payload, nil
+	return payload, src, nil
 }
 
 func calcHash(pass string, b []byte, timestamp uint32) (hash [16]byte, err error) {
