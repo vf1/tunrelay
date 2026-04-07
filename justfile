@@ -13,3 +13,7 @@ replace_ip: build
 
 replace_subnet: build
   cd bin && ./tunrelay --config=../config/replace_subnet.yaml
+
+multi_client: build
+  cd bin && ./tunrelay --config=../config/multi_client_linux.yaml
+

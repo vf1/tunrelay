@@ -1,0 +1,39 @@
+system:
+  ip_forward: true
+  masquerade:
+    saddr: "10.0.1.0/24"
+relays:
+  #------------------------
+  - ingress:
+      type: tun
+      name: tun10
+      cidr: "10.0.0.3/32"
+      peer: "10.0.0.1"
+    egress:
+      type: udp
+      dial: "localhost:4000"
+      password: "pass"
+  #------------------------
+  - ingress:
+      type: tun
+      name: tun12
+      cidr: "10.0.0.4/32"
+      peer: "10.0.0.1"
+    egress:
+      type: udp
+      dial: "localhost:4000"
+      password: "pass"
+  #------------------------
+  - ingress:
+      type: udp
+      listen: "localhost:4000"
+      password: "pass"
+    middlewares:
+      - type: replace_ip
+        forward_src: "10.0.1.0/24"
+        backward_dst: "10.0.0.0/24"
+    egress:
+      type: tun
+      name: tun20
+      cidr: "10.0.1.1/24"
+      peer: "10.0.1.2"
