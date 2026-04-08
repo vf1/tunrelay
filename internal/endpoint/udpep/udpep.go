@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 	"tunrelay/internal/iptool"
 )
@@ -19,7 +20,7 @@ var (
 	ErrWrongPass   = errors.New("wrong password")
 	ErrSmallPacket = errors.New("empty packet")
 	ErrStalePacket = errors.New("stale packet")
-	ErrUnknownPeer = errors.New("unknown peer")
+	ErrNotAllowSrc = errors.New("not allow src")
 )
 
 const (
@@ -62,7 +63,7 @@ func unpack(packet []byte, lookupPassword func(src [4]byte) (string, bool)) ([]b
 	src = iptool.Src(payload)
 	pass, found := lookupPassword(src)
 	if !found {
-		return nil, src, ErrUnknownPeer
+		return nil, src, fmt.Errorf("src %s: %w", netip.AddrFrom4(src), ErrNotAllowSrc)
 	}
 
 	hash, err := calcHash(pass, payload, rtimestamp)

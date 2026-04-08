@@ -13,6 +13,7 @@ relays:
       type: udp
       dial: "localhost:4000"
       password: "pass"
+      allow_src: "10.0.0.3/32" 
   #------------------------
   - ingress:
       type: tun
@@ -23,6 +24,7 @@ relays:
       type: udp
       dial: "localhost:4000"
       password: "pass"
+      allow_src: "10.0.0.4/32" 
   #------------------------
   - ingress:
       type: udp

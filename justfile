@@ -17,3 +17,5 @@ replace_subnet: build
 multi_client: build
   cd bin && ./tunrelay --config=../config/multi_client_linux.yaml
 
+client: build
+  cd bin && ./tunrelay --config=../config/client.yaml

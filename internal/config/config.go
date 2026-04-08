@@ -63,6 +63,7 @@ type UDPEgress struct {
 	Type     string `yaml:"type"`
 	Password string `yaml:"password"`
 	Dial     string `yaml:"dial"`
+	AllowSrc string `yaml:"allow_src"`
 }
 
 type ReplaceIP struct {

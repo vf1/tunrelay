@@ -73,10 +73,10 @@ func (i *Ingress) Write(ctx context.Context, b []byte) (context.Context, int, er
 	if len(b) < HeaderSize {
 		return nil, 0, ErrSmallPacket
 	}
-	src := iptool.Dst(b)
-	raddr := i.lookupRaddr(src)
+	dst := iptool.Dst(b)
+	raddr := i.lookupRaddr(dst)
 	if raddr == nil {
-		return ctx, 0, ErrNoPeer
+		return ctx, 0, fmt.Errorf("dst %s: %w", netip.AddrFrom4(dst), ErrNoPeer)
 	}
 
 	i.conn.SetDeadline(time.Now().Add(UDPTimeout))
@@ -108,6 +108,9 @@ func (i *Ingress) lookupRaddr(src [4]byte) net.Addr {
 		return nil
 	}
 	raddr := peer.raddr.Load()
+	if raddr == nil {
+		return nil
+	}
 	return *raddr
 }
 

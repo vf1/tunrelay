@@ -1,1 +1,3 @@
 /bin
+/config/client.yaml
+/config/server.yaml
