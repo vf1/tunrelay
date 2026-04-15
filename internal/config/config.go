@@ -34,10 +34,11 @@ type Relay struct {
 }
 
 type TunEndpoint struct {
-	Type string `yaml:"type"`
-	Name string `yaml:"name"`
-	CIDR string `yaml:"cidr"`
-	Peer string `yaml:"peer"`
+	Type             string `yaml:"type"`
+	Name             string `yaml:"name"`
+	CIDR             string `yaml:"cidr"`
+	Peer             string `yaml:"peer"`
+	DisableIPv6Linux bool   `yaml:"disable_ipv6_linux"`
 }
 
 type TunIngress struct {

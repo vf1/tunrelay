@@ -9,6 +9,7 @@ relays:
       name: tun10
       cidr: "10.0.0.3/32"
       peer: "10.0.0.1"
+      disable_ipv6_linux: true
     egress:
       type: udp
       dial: "localhost:4000"
@@ -21,6 +22,7 @@ relays:
       name: tun12
       cidr: "10.0.0.4/32"
       peer: "10.0.0.1"
+      disable_ipv6_linux: true
     egress:
       type: udp
       dial: "localhost:4000"
