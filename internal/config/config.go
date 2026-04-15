@@ -60,10 +60,11 @@ type Peer struct {
 }
 
 type UDPEgress struct {
-	Type     string `yaml:"type"`
-	Password string `yaml:"password"`
-	Dial     string `yaml:"dial"`
-	AllowSrc string `yaml:"allow_src"`
+	Type      string `yaml:"type"`
+	Password  string `yaml:"password"`
+	Dial      string `yaml:"dial"`
+	AllowSrc  string `yaml:"allow_src"`
+	AllowIPv6 bool   `yaml:"allow_ipv6"`
 }
 
 type ReplaceIP struct {

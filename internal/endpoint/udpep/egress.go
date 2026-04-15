@@ -13,12 +13,13 @@ import (
 )
 
 type Egress struct {
-	mu       sync.Mutex
-	conn     *net.UDPConn
-	dial     string
-	pass     string
-	allowSrc netip.Prefix
-	log      Logger
+	mu        sync.Mutex
+	conn      *net.UDPConn
+	dial      string
+	pass      string
+	allowSrc  netip.Prefix
+	allowIPv6 bool
+	log       Logger
 }
 
 func NewEgress(cfg config.UDPEgress, log Logger) (*Egress, error) {
@@ -35,13 +36,14 @@ func NewEgress(cfg config.UDPEgress, log Logger) (*Egress, error) {
 	if !allowSrc.IsValid() {
 		logAllowSrc = "any"
 	}
-	log.Info("udp client", "remote", cfg.Dial, "allow_src", logAllowSrc)
+	log.Info("udp client", "remote", cfg.Dial, "allow_src", logAllowSrc, "allow_ipv6", cfg.AllowIPv6)
 
 	return &Egress{
-		dial:     cfg.Dial,
-		pass:     cfg.Password,
-		allowSrc: allowSrc,
-		log:      log,
+		dial:      cfg.Dial,
+		pass:      cfg.Password,
+		allowSrc:  allowSrc,
+		allowIPv6: cfg.AllowIPv6,
+		log:       log,
 	}, nil
 }
 
@@ -61,14 +63,27 @@ func (e *Egress) Write(ctx context.Context, b []byte) (context.Context, int, err
 		return ctx, 0, fmt.Errorf("connect: %w", err)
 	}
 
-	if e.allowSrc.IsValid() {
+	if !iptool.CanGetVersion(b) {
+		return ctx, 0, fmt.Errorf("can not get ip version")
+	}
+	version := iptool.Version(b)
+	if version != 4 && version != 6 {
+		return ctx, 0, fmt.Errorf("wrong ip version %v", version)
+	}
+
+	if e.allowIPv6 == false && version == 6 {
+		return ctx, 0, fmt.Errorf("not ipv4, ver %v", version)
+	}
+
+	if version == 4 && e.allowSrc.IsValid() {
 		if len(b) < iptool.IPHeaderMinSize {
 			return ctx, 0, fmt.Errorf("can not get src")
 		}
+		proto := b[iptool.ProtocolOffset]
 		src := netip.AddrFrom4(iptool.Src(b))
 		dst := netip.AddrFrom4(iptool.Dst(b))
 		if !e.allowSrc.Contains(src) {
-			return ctx, 0, fmt.Errorf("src %s, dst: %s: %w", src, dst, ErrNotAllowSrc)
+			return ctx, 0, fmt.Errorf("proto: %v, src %s, dst: %s: %w", proto, src, dst, ErrNotAllowSrc)
 		}
 	}
 

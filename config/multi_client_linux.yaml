@@ -14,6 +14,7 @@ relays:
       dial: "localhost:4000"
       password: "pass"
       allow_src: "10.0.0.3/32" 
+      allow_ipv6: false
   #------------------------
   - ingress:
       type: tun
@@ -25,6 +26,7 @@ relays:
       dial: "localhost:4000"
       password: "pass"
       allow_src: "10.0.0.4/32" 
+      allow_ipv6: false
   #------------------------
   - ingress:
       type: udp

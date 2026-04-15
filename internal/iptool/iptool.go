@@ -21,6 +21,14 @@ const (
 	UdpChecksummOffset = 6
 )
 
+func CanGetVersion(ip []byte) bool {
+	return len(ip) >= 1
+}
+
+func Version(ip []byte) byte {
+	return ip[0] >> 4
+}
+
 func PutSrc(ip []byte, addr [4]byte) {
 	copy(ip[SrcOffset:], addr[:])
 }
