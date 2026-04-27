@@ -15,25 +15,30 @@ const PrefixSize = 4
 
 func read(f *os.File, p []byte, off int) (int, error) {
 	n, err := f.Read(p[off-PrefixSize:])
-	if n <= PrefixSize {
+	if err != nil {
 		return 0, err
 	}
-	return n - 4, err
+	if n <= PrefixSize {
+		return 0, fmt.Errorf("darwin read less %v bytes", PrefixSize)
+	}
+	return n - PrefixSize, err
 }
 
 func write(f *os.File, p []byte, off int) (int, error) {
+	p = p[off-PrefixSize:]
 	p[0] = 0x00
 	p[1] = 0x00
 	p[2] = 0x00
-	switch p[off] >> 4 {
+	ver := p[PrefixSize] >> 4
+	switch ver {
 	case 4:
 		p[3] = unix.AF_INET
 	case 6:
 		p[3] = unix.AF_INET6
 	default:
-		return 0, fmt.Errorf("unsupported ip version %d", p[off]>>4)
+		return 0, fmt.Errorf("unsupported ip version %d", ver)
 	}
-	_, err := f.Write(p[off-PrefixSize:])
+	_, err := f.Write(p)
 	if err != nil {
 		return 0, err
 	}
