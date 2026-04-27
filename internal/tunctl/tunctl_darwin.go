@@ -2,22 +2,55 @@ package tunctl
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 
-	"github.com/songgao/water"
+	"golang.org/x/sys/unix"
 )
 
-func CreateTun(name string) (*water.Interface, error) {
-	tun, err := water.New(water.Config{
-		DeviceType:             water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{Name: name},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create tunnel: %w", err)
+func CreateTun(name string) (*os.File, error) {
+	ifIndex := -1
+	if name != "utun" {
+		_, err := fmt.Sscanf(name, "utun%d", &ifIndex)
+		if err != nil || ifIndex < 0 {
+			return nil, fmt.Errorf("interface name must be utun[0-9]*")
+		}
 	}
-	return tun, nil
+
+	syscall.ForkLock.RLock()
+	fd, err := unix.Socket(unix.AF_SYSTEM, unix.SOCK_DGRAM, 2)
+	if err != nil {
+		syscall.ForkLock.RUnlock()
+		return nil, fmt.Errorf("socket: %w", err)
+	}
+	unix.CloseOnExec(fd)
+	syscall.ForkLock.RUnlock()
+
+	ctlInfo := &unix.CtlInfo{}
+	copy(ctlInfo.Name[:], []byte("com.apple.net.utun_control"))
+	if err := unix.IoctlCtlInfo(fd, ctlInfo); err != nil {
+		unix.Close(fd)
+		return nil, fmt.Errorf("ioctl ctlinfo: %w", err)
+	}
+
+	sc := &unix.SockaddrCtl{
+		ID:   ctlInfo.Id,
+		Unit: uint32(ifIndex) + 1,
+	}
+	if err := unix.Connect(fd, sc); err != nil {
+		unix.Close(fd)
+		return nil, fmt.Errorf("connect utun: %w", err)
+	}
+
+	if err := unix.SetNonblock(fd, true); err != nil {
+		unix.Close(fd)
+		return nil, fmt.Errorf("set nonblock: %w", err)
+	}
+
+	return os.NewFile(uintptr(fd), name), nil
 }
 
 func UpIface(name, localAddr, peerAddr, mask string) error {

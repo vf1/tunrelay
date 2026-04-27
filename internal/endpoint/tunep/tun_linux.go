@@ -9,8 +9,16 @@ import (
 	"tunrelay/internal/tunctl"
 )
 
+func read(f *os.File, p []byte, off int) (int, error) {
+	return f.Read(p[off:])
+}
+
+func write(f *os.File, p []byte, off int) (int, error) {
+	return f.Write(p[off:])
+}
+
 func createTun(cfg config.TunEndpoint, log Logger) (*os.File, error) {
-	tun, err := tunctl.CreateTun(cfg.Name)
+	f, err := tunctl.CreateTun(cfg.Name)
 	if err != nil {
 		return nil, fmt.Errorf("create %v: %w", cfg.Name, err)
 	}
@@ -25,5 +33,5 @@ func createTun(cfg config.TunEndpoint, log Logger) (*os.File, error) {
 	}
 
 	log.Info("interface created", "name", cfg.Name, "cidr", cfg.CIDR)
-	return tun, nil
+	return f, nil
 }

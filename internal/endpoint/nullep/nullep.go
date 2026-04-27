@@ -15,11 +15,11 @@ func NewEndpoint(name string, log Logger) *Endpoing {
 	return &Endpoing{EPName: name}
 }
 
-func (_ *Endpoing) Read(ctx context.Context, b []byte) (context.Context, int, error) {
+func (_ *Endpoing) Read(ctx context.Context, b []byte, off int) (context.Context, int, error) {
 	select {}
 }
 
-func (_ *Endpoing) Write(ctx context.Context, b []byte) (context.Context, int, error) {
+func (_ *Endpoing) Write(ctx context.Context, b []byte, off int) (context.Context, int, error) {
 	select {}
 }
 

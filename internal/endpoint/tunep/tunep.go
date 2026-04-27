@@ -2,7 +2,7 @@ package tunep
 
 import (
 	"context"
-	"io"
+	"os"
 
 	"tunrelay/internal/config"
 )
@@ -12,54 +12,51 @@ type Logger interface {
 }
 
 type Ingress struct {
-	io.ReadWriteCloser
+	f *os.File
 }
 
 type Egress struct {
-	io.ReadWriteCloser
+	f *os.File
 }
 
 func NewIngress(cfg config.TunIngress, log Logger) (*Ingress, error) {
-	tun, err := createTun(cfg.TunEndpoint, log)
+	f, err := createTun(cfg.TunEndpoint, log)
 	if err != nil {
 		return nil, err
 	}
-	return &Ingress{tun}, nil
+	return &Ingress{f}, nil
 }
 
 func NewEgress(cfg config.TunEgress, log Logger) (*Egress, error) {
-	tun, err := createTun(cfg.TunEndpoint, log)
+	f, err := createTun(cfg.TunEndpoint, log)
 	if err != nil {
 		return nil, err
 	}
-
-	return &Egress{tun}, nil
+	return &Egress{f}, nil
 }
 
-func (_ *Ingress) Name() string {
-	return "tun ingress"
-}
-
-func (_ *Egress) Name() string {
-	return "tun egress"
-}
-
-func (i *Ingress) Read(ctx context.Context, p []byte) (context.Context, int, error) {
-	n, err := i.ReadWriteCloser.Read(p)
+func (i *Ingress) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	n, err := read(i.f, p, off)
 	return ctx, n, err
 }
 
-func (e *Egress) Read(ctx context.Context, p []byte) (context.Context, int, error) {
-	n, err := e.ReadWriteCloser.Read(p)
+func (i *Ingress) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	n, err := write(i.f, p, off)
 	return ctx, n, err
 }
 
-func (i *Ingress) Write(ctx context.Context, p []byte) (context.Context, int, error) {
-	n, err := i.ReadWriteCloser.Write(p)
+func (i *Ingress) Close() error { return i.f.Close() }
+func (_ *Ingress) Name() string { return "tun ingress" }
+
+func (e *Egress) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	n, err := read(e.f, p, off)
 	return ctx, n, err
 }
 
-func (e *Egress) Write(ctx context.Context, p []byte) (context.Context, int, error) {
-	n, err := e.ReadWriteCloser.Write(p)
+func (e *Egress) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	n, err := write(e.f, p, off)
 	return ctx, n, err
 }
+
+func (e *Egress) Close() error { return e.f.Close() }
+func (_ *Egress) Name() string { return "tun egress" }

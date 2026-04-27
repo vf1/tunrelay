@@ -47,26 +47,27 @@ func NewEgress(cfg config.UDPEgress, log Logger) (*Egress, error) {
 	}, nil
 }
 
-func (e *Egress) Read(ctx context.Context, b []byte) (context.Context, int, error) {
+func (e *Egress) Read(ctx context.Context, b []byte, off int) (context.Context, int, error) {
 	conn, err := e.connect()
 	if err != nil {
 		return ctx, 0, fmt.Errorf("connect: %w", err)
 	}
 
-	n, err := conn.Read(b)
+	n, err := conn.Read(b[off:])
 	return ctx, n, err
 }
 
-func (e *Egress) Write(ctx context.Context, b []byte) (context.Context, int, error) {
+func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context, int, error) {
+	p := b[off:]
 	conn, err := e.connect()
 	if err != nil {
 		return ctx, 0, fmt.Errorf("connect: %w", err)
 	}
 
-	if !iptool.CanGetVersion(b) {
+	if !iptool.CanGetVersion(p) {
 		return ctx, 0, fmt.Errorf("can not get ip version")
 	}
-	version := iptool.Version(b)
+	version := iptool.Version(p)
 	if version != 4 && version != 6 {
 		return ctx, 0, fmt.Errorf("wrong ip version %v", version)
 	}
@@ -76,18 +77,18 @@ func (e *Egress) Write(ctx context.Context, b []byte) (context.Context, int, err
 	}
 
 	if version == 4 && e.allowSrc.IsValid() {
-		if len(b) < iptool.IPHeaderMinSize {
+		if len(p) < iptool.IPHeaderMinSize {
 			return ctx, 0, fmt.Errorf("can not get src")
 		}
-		proto := b[iptool.ProtocolOffset]
-		src := netip.AddrFrom4(iptool.Src(b))
-		dst := netip.AddrFrom4(iptool.Dst(b))
+		proto := p[iptool.ProtocolOffset]
+		src := netip.AddrFrom4(iptool.Src(p))
+		dst := netip.AddrFrom4(iptool.Dst(p))
 		if !e.allowSrc.Contains(src) {
 			return ctx, 0, fmt.Errorf("proto: %v, src %s, dst: %s: %w", proto, src, dst, ErrNotAllowSrc)
 		}
 	}
 
-	bb, err := pack(b, e.pass)
+	bb, err := pack(p, e.pass)
 	if err != nil {
 		return ctx, 0, fmt.Errorf("pack: %w", err)
 	}

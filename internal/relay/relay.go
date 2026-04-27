@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	MaxPacketSize = 2048
+	BufferOffset = 16
+	BufferSize   = 2048
 )
 
 type Logger interface {
@@ -116,12 +117,12 @@ type pipeMiddleware struct {
 }
 
 func pipe(a, b Endpoint, middlewares []pipeMiddleware, log Logger) {
-	buf := make([]byte, MaxPacketSize)
+	buf := make([]byte, BufferSize)
 
 pipe:
 	for {
 		ctx := context.Background()
-		ctx, n, err := a.Read(ctx, buf)
+		ctx, n, err := a.Read(ctx, buf, BufferOffset)
 		if err != nil {
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
@@ -130,17 +131,15 @@ pipe:
 			continue
 		}
 
-		packet := buf[:n]
-
 		for _, mw := range middlewares {
-			ctx, err = mw.Process(ctx, packet)
+			ctx, err = mw.Process(ctx, buf[BufferOffset:BufferOffset+n])
 			if err != nil {
 				log.Error(fmt.Sprintf("%v process: %v", mw.Name(), err))
 				continue pipe
 			}
 		}
 
-		ctx, _, err = b.Write(ctx, packet)
+		ctx, _, err = b.Write(ctx, buf[:BufferOffset+n], BufferOffset)
 		if err != nil {
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
@@ -153,8 +152,8 @@ pipe:
 
 type Endpoint interface {
 	io.Closer
-	Read(ctx context.Context, p []byte) (context.Context, int, error)
-	Write(ctx context.Context, p []byte) (context.Context, int, error)
+	Read(ctx context.Context, p []byte, off int) (context.Context, int, error)
+	Write(ctx context.Context, p []byte, off int) (context.Context, int, error)
 	Name() string
 }
 

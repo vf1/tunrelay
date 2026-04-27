@@ -50,13 +50,13 @@ func NewIngress(cfg config.UDPIngress, log Logger) (*Ingress, error) {
 	return &Ingress{conn: conn, peers: peers, log: log}, nil
 }
 
-func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, error) {
-	n, raddr, err := i.conn.ReadFrom(b)
+func (i *Ingress) Read(ctx context.Context, b []byte, off int) (context.Context, int, error) {
+	n, raddr, err := i.conn.ReadFrom(b[off:])
 	if err != nil {
 		return ctx, 0, err
 	}
 
-	data, src, err := unpack(b[:n:n], i.lookupPassword)
+	data, src, err := unpack(b[off : off+n : off+n], i.lookupPassword)
 	if err != nil {
 		return ctx, 0, err
 	}
@@ -64,16 +64,17 @@ func (i *Ingress) Read(ctx context.Context, b []byte) (context.Context, int, err
 	i.updateRaddr(src, raddr)
 	ctx = withRemoteAddr(ctx, raddr)
 
-	copy(b, data)
+	copy(b[off:], data)
 
 	return ctx, len(data), nil
 }
 
-func (i *Ingress) Write(ctx context.Context, b []byte) (context.Context, int, error) {
-	if len(b) < HeaderSize {
+func (i *Ingress) Write(ctx context.Context, b []byte, off int) (context.Context, int, error) {
+	p := b[off:]
+	if len(p) < HeaderSize {
 		return nil, 0, ErrSmallPacket
 	}
-	dst := iptool.Dst(b)
+	dst := iptool.Dst(p)
 	raddr := i.lookupRaddr(dst)
 	if raddr == nil {
 		return ctx, 0, fmt.Errorf("dst %s: %w", netip.AddrFrom4(dst), ErrNoPeer)
@@ -82,7 +83,7 @@ func (i *Ingress) Write(ctx context.Context, b []byte) (context.Context, int, er
 	i.conn.SetDeadline(time.Now().Add(UDPTimeout))
 	defer i.conn.SetDeadline(time.Time{})
 
-	n, err := i.conn.WriteTo(b, raddr)
+	n, err := i.conn.WriteTo(p, raddr)
 	return ctx, n, err
 }
 
