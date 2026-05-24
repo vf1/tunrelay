@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"syscall"
 	"time"
 	"tunrelay/internal/iptool"
 )
 
 type Logger interface {
 	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
 }
 
 var (
@@ -24,11 +26,17 @@ var (
 )
 
 const (
-	HashSize    = md5.Size
-	HeaderSize  = 4 + HashSize
-	MaxTimeDiff = 4 // seconds
-	UDPTimeout  = 10 * time.Second
+	HashSize        = md5.Size
+	HeaderSize      = 4 + HashSize
+	MaxTimeDiff     = 4 // seconds
+	UDPTimeout      = 10 * time.Second
+	WriteRetries    = 8
+	WriteRetryDelay = 32 * time.Millisecond
 )
+
+func isENOBUFS(err error) bool {
+	return errors.Is(err, syscall.ENOBUFS)
+}
 
 func pack(b []byte, pass string) (net.Buffers, error) {
 	header := make([]byte, HeaderSize)

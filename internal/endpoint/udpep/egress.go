@@ -93,10 +93,24 @@ func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context,
 		return ctx, 0, fmt.Errorf("pack: %w", err)
 	}
 
-	conn.SetDeadline(time.Now().Add(UDPTimeout))
+	var n int64
+	retry := 0
+	delay := WriteRetryDelay
 	defer conn.SetDeadline(time.Time{})
-
-	n, err := bb.WriteTo(conn)
+	for {
+		conn.SetDeadline(time.Now().Add(UDPTimeout))
+		n, err = bb.WriteTo(conn)
+		if err == nil || !isENOBUFS(err) {
+			break
+		}
+		if retry >= WriteRetries {
+			return ctx, 0, fmt.Errorf("resend on ENOBUFS attemps exceed: %w", err)
+		}
+		e.log.Warn("ENOBUFS", "retry", retry+1, "sleep", delay)
+		time.Sleep(delay)
+		retry += 1
+		delay *= 2
+	}
 	return ctx, int(n), err
 }
 
