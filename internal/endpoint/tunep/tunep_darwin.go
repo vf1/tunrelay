@@ -1,6 +1,7 @@
 package tunep
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +13,22 @@ import (
 )
 
 const PrefixSize = 4
+
+type tunDevice struct {
+	f *os.File
+}
+
+func (i *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	n, err := read(i.f, p, off)
+	return ctx, n, err
+}
+
+func (i *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	n, err := write(i.f, p, off)
+	return ctx, n, err
+}
+
+func (i *tunDevice) Close() error { return i.f.Close() }
 
 func read(f *os.File, p []byte, off int) (int, error) {
 	n, err := f.Read(p[off-PrefixSize:])
@@ -45,7 +62,7 @@ func write(f *os.File, p []byte, off int) (int, error) {
 	return len(p) - off, nil
 }
 
-func createTun(cfg config.TunEndpoint, log Logger) (*os.File, error) {
+func createTun(cfg config.TunEndpoint, log Logger) (*tunDevice, error) {
 	name := "u" + cfg.Name
 
 	f, err := tunctl.CreateTun(name)
@@ -70,5 +87,5 @@ func createTun(cfg config.TunEndpoint, log Logger) (*os.File, error) {
 	}
 
 	log.Info("interface created", "name", name, "local", localAddr, "peer", cfg.Peer, "mask", mask)
-	return f, nil
+	return &tunDevice{f}, nil
 }
