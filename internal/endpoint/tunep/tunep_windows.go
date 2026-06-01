@@ -3,6 +3,7 @@ package tunep
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"unsafe"
 
@@ -21,13 +22,23 @@ type tunDevice struct {
 }
 
 func (d *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
-	ptr, size, err := d.w.ReceivePacket(d.session)
-	if err != nil {
-		return nil, 0, err
+	for {
+		ptr, size, err := d.w.ReceivePacket(d.session)
+		if err != nil {
+			if errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
+				event, err := d.w.GetReadWaitEvent(d.session)
+				if err != nil {
+					return nil, 0, fmt.Errorf("get read wait event: %w", err)
+				}
+				windows.WaitForSingleObject(event, windows.INFINITE)
+				continue
+			}
+			return nil, 0, err
+		}
+		defer d.w.ReleaseReceivePacket(d.session, ptr)
+		n := copy(p[off:], unsafe.Slice((*byte)(ptr), size))
+		return ctx, n, nil
 	}
-	defer d.w.ReleaseReceivePacket(d.session, ptr)
-	n := copy(p[off:], unsafe.Slice((*byte)(ptr), size))
-	return ctx, n, nil
 }
 
 func (d *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {

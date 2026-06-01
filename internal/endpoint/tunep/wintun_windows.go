@@ -71,10 +71,6 @@ func (w *Wintun) callR1(proc *windows.Proc, op string, args ...uintptr) (uintptr
 	return r1, nil
 }
 
-func (w *Wintun) callR0(proc *windows.Proc, args ...uintptr) {
-	proc.Call(args...)
-}
-
 func (w *Wintun) CreateAdapter(name string, guid *windows.GUID) (Adapter, error) {
 	namePtr, err := windows.UTF16PtrFromString(name)
 	if err != nil {
@@ -91,7 +87,7 @@ func (w *Wintun) CreateAdapter(name string, guid *windows.GUID) (Adapter, error)
 }
 
 func (w *Wintun) CloseAdapter(a Adapter) {
-	w.callR0(w.closeAdapter, uintptr(a))
+	w.closeAdapter.Call(uintptr(a))
 }
 
 func (w *Wintun) StartSession(a Adapter, capacity uint32) (Session, error) {
@@ -100,7 +96,7 @@ func (w *Wintun) StartSession(a Adapter, capacity uint32) (Session, error) {
 }
 
 func (w *Wintun) EndSession(s Session) {
-	w.callR0(w.endSession, uintptr(s))
+	w.endSession.Call(uintptr(s))
 }
 
 func (w *Wintun) GetReadWaitEvent(s Session) (windows.Handle, error) {
@@ -115,7 +111,7 @@ func (w *Wintun) ReceivePacket(s Session) (unsafe.Pointer, uint32, error) {
 }
 
 func (w *Wintun) ReleaseReceivePacket(s Session, packet unsafe.Pointer) {
-	w.callR0(w.releaseReceive, uintptr(s), uintptr(packet))
+	w.releaseReceive.Call(uintptr(s), uintptr(packet))
 }
 
 func (w *Wintun) AllocateSendPacket(s Session, size int) (unsafe.Pointer, error) {
@@ -124,5 +120,5 @@ func (w *Wintun) AllocateSendPacket(s Session, size int) (unsafe.Pointer, error)
 }
 
 func (w *Wintun) SendPacket(s Session, packet unsafe.Pointer) {
-	w.callR0(w.sendPacket, uintptr(s), uintptr(packet))
+	w.sendPacket.Call(uintptr(s), uintptr(packet))
 }
