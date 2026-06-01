@@ -19,29 +19,17 @@ type tunDevice struct {
 }
 
 func (i *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
-	n, err := read(i.f, p, off)
-	return ctx, n, err
+	n, err := i.f.Read(p[off-PrefixSize:])
+	if err != nil {
+		return ctx, 0, err
+	}
+	if n <= PrefixSize {
+		return ctx, 0, fmt.Errorf("darwin read less %v bytes", PrefixSize)
+	}
+	return ctx, n - PrefixSize, err
 }
 
 func (i *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {
-	n, err := write(i.f, p, off)
-	return ctx, n, err
-}
-
-func (i *tunDevice) Close() error { return i.f.Close() }
-
-func read(f *os.File, p []byte, off int) (int, error) {
-	n, err := f.Read(p[off-PrefixSize:])
-	if err != nil {
-		return 0, err
-	}
-	if n <= PrefixSize {
-		return 0, fmt.Errorf("darwin read less %v bytes", PrefixSize)
-	}
-	return n - PrefixSize, err
-}
-
-func write(f *os.File, p []byte, off int) (int, error) {
 	p = p[off-PrefixSize:]
 	p[0] = 0x00
 	p[1] = 0x00
@@ -53,14 +41,16 @@ func write(f *os.File, p []byte, off int) (int, error) {
 	case 6:
 		p[3] = unix.AF_INET6
 	default:
-		return 0, fmt.Errorf("unsupported ip version %d", ver)
+		return ctx, 0, fmt.Errorf("unsupported ip version %d", ver)
 	}
-	_, err := f.Write(p)
+	_, err := i.f.Write(p)
 	if err != nil {
-		return 0, err
+		return ctx, 0, err
 	}
-	return len(p) - off, nil
+	return ctx, len(p) - off, nil
 }
+
+func (i *tunDevice) Close() error { return i.f.Close() }
 
 func createTun(cfg config.TunEndpoint, log Logger) (*tunDevice, error) {
 	name := "u" + cfg.Name
