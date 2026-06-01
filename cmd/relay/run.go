@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"tunrelay/internal/config"
 	"tunrelay/internal/sysctl"
@@ -32,13 +30,6 @@ func getConfig() (*config.Config, error) {
 	}
 
 	return cfg, nil
-}
-
-func waitForSigterm() {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
-	signal.Stop(ch)
 }
 
 func setupSystem(cfg config.System) (func(), error) {
