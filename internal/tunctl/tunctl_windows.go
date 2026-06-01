@@ -25,14 +25,14 @@ func UpIface(name, cidr string) error {
 }
 
 func RouteAllToTun(tun, exceptIP string) error {
-	gateway, ifIndex, err := getDefaultRoute()
+	gateway, err := getDefaultRoute()
 	if err != nil {
 		return fmt.Errorf("get default route: %w", err)
 	}
 
-	tunGateway, err := getTunGateway(tun)
+	tunLocalIP, tunIfIndex, err := getTunInterface(tun)
 	if err != nil {
-		return fmt.Errorf("get tun gateway: %w", err)
+		return fmt.Errorf("get tun interface: %w", err)
 	}
 
 	type routeCmd struct {
@@ -40,11 +40,11 @@ func RouteAllToTun(tun, exceptIP string) error {
 		desc string
 	}
 	cmds := []routeCmd{
-		{strings.Fields(fmt.Sprintf("route add %s %s IF %s", exceptIP, gateway, ifIndex)),
+		{strings.Fields(fmt.Sprintf("route add %s %s", exceptIP, gateway)),
 			"except route"},
-		{strings.Fields(fmt.Sprintf("route add 0.0.0.0 mask 128.0.0.0 %s", tunGateway)),
+		{strings.Fields(fmt.Sprintf("route add 0.0.0.0 mask 128.0.0.0 %s IF %d", tunLocalIP, tunIfIndex)),
 			"0.0.0.0/1 route"},
-		{strings.Fields(fmt.Sprintf("route add 128.0.0.0 mask 128.0.0.0 %s", tunGateway)),
+		{strings.Fields(fmt.Sprintf("route add 128.0.0.0 mask 128.0.0.0 %s IF %d", tunLocalIP, tunIfIndex)),
 			"128.0.0.0/1 route"},
 	}
 
@@ -88,33 +88,36 @@ func DisableMasquerade(_, _ string) error {
 	return nil
 }
 
-func getDefaultRoute() (gateway, ifIndex string, err error) {
+func getDefaultRoute() (gateway string, err error) {
 	out, err := exec.Command("route", "print", "-4", "0.0.0.0").Output()
 	if err != nil {
-		return "", "", fmt.Errorf("route print: %w", err)
+		return "", fmt.Errorf("route print: %w", err)
 	}
 
-	re := regexp.MustCompile(`^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+(\S+)\s+(\S+)\s+(\d+)`)
+	re := regexp.MustCompile(`^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+(\S+)`)
 	for _, line := range strings.Split(string(out), "\n") {
 		m := re.FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}
-		return m[2], m[3], nil
+		return m[1], nil
 	}
-	return "", "", fmt.Errorf("default route not found")
+	return "", fmt.Errorf("default route not found")
 }
 
-func getTunGateway(tun string) (string, error) {
-	out, err := exec.Command("netsh", "interface", "ip", "show", "address", "name="+tun).Output()
+func getTunInterface(tun string) (ip string, ifIndex int, err error) {
+	iface, err := net.InterfaceByName(tun)
 	if err != nil {
-		return "", fmt.Errorf("netsh show address: %w", err)
+		return "", 0, err
 	}
-
-	re := regexp.MustCompile(`(?i)IP\s+address[:\s]+(\d+\.\d+\.\d+\.\d+)`)
-	m := re.FindStringSubmatch(string(out))
-	if m == nil {
-		return "", fmt.Errorf("tun interface %s has no IP address", tun)
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return "", 0, err
 	}
-	return m[1], nil
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+			return ipnet.IP.String(), iface.Index, nil
+		}
+	}
+	return "", 0, fmt.Errorf("tun interface %s has no IPv4 address", tun)
 }
