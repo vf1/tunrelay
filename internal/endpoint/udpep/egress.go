@@ -2,10 +2,12 @@ package udpep
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"sync"
+	"syscall"
 	"time"
 
 	"tunrelay/internal/config"
@@ -100,16 +102,32 @@ func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context,
 	for {
 		conn.SetDeadline(time.Now().Add(UDPTimeout))
 		n, err = bb.WriteTo(conn)
-		if err == nil || !isENOBUFS(err) {
+		if err == nil {
 			break
 		}
-		if retry >= WriteRetries {
-			return ctx, 0, fmt.Errorf("resend on ENOBUFS attemps exceed: %w", err)
+		if errno, ok := errors.AsType[syscall.Errno](err); ok {
+			switch errno {
+			case syscall.ENOBUFS:
+				e.log.Warn("ENOBUFS", "retry", retry+1, "sleep", delay)
+				time.Sleep(delay)
+				retry += 1
+				delay *= 2
+				if retry >= WriteRetries {
+					return ctx, 0, fmt.Errorf("resend on ENOBUFS attemps exceed: %w", err)
+				}
+			case syscall.EADDRNOTAVAIL:
+				e.log.Warn("close broken connection", "errno", errno)
+				closeErr := e.Close()
+				if closeErr != nil {
+					err = errors.Join(err, closeErr)
+				}
+				fallthrough
+			default:
+				return ctx, 0, err
+			}
+		} else {
+			return ctx, 0, err
 		}
-		e.log.Warn("ENOBUFS", "retry", retry+1, "sleep", delay)
-		time.Sleep(delay)
-		retry += 1
-		delay *= 2
 	}
 	return ctx, int(n), err
 }
@@ -117,11 +135,16 @@ func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context,
 func (e *Egress) Close() error {
 	e.mu.Lock()
 	conn := e.conn
+	e.conn = nil
 	e.mu.Unlock()
 	if conn == nil {
 		return nil
 	}
 	return conn.Close()
+}
+
+func (_ *Egress) Name() string {
+	return "udp egress"
 }
 
 func (e *Egress) connect() (*net.UDPConn, error) {
@@ -142,8 +165,4 @@ func (e *Egress) connect() (*net.UDPConn, error) {
 
 	e.conn = conn
 	return e.conn, nil
-}
-
-func (_ *Egress) Name() string {
-	return "udp egress"
 }

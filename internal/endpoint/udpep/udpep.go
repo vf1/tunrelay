@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"syscall"
 	"time"
 	"tunrelay/internal/iptool"
 )
@@ -33,10 +32,6 @@ const (
 	WriteRetries    = 8
 	WriteRetryDelay = 32 * time.Millisecond
 )
-
-func isENOBUFS(err error) bool {
-	return errors.Is(err, syscall.ENOBUFS)
-}
 
 func pack(b []byte, pass string) (net.Buffers, error) {
 	header := make([]byte, HeaderSize)
