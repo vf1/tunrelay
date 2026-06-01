@@ -20,17 +20,17 @@ type tunDevice struct {
 	session Session
 }
 
-func (d *tunDevice) Read(_ context.Context, p []byte, off int) (context.Context, int, error) {
+func (d *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
 	ptr, size, err := d.w.ReceivePacket(d.session)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer d.w.ReleaseReceivePacket(d.session, ptr)
 	n := copy(p[off:], unsafe.Slice((*byte)(ptr), size))
-	return nil, n, nil
+	return ctx, n, nil
 }
 
-func (d *tunDevice) Write(_ context.Context, p []byte, off int) (context.Context, int, error) {
+func (d *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {
 	n := len(p[off:])
 	ptr, err := d.w.AllocateSendPacket(d.session, n)
 	if err != nil {
@@ -38,7 +38,7 @@ func (d *tunDevice) Write(_ context.Context, p []byte, off int) (context.Context
 	}
 	copy(unsafe.Slice((*byte)(ptr), n), p[off:])
 	d.w.SendPacket(d.session, ptr)
-	return nil, n, nil
+	return ctx, n, nil
 }
 
 func (d *tunDevice) Close() error {
