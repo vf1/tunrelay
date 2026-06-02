@@ -2,13 +2,18 @@ package tunep
 
 import (
 	"fmt"
+	"os"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 type Wintun struct {
-	dll *windows.DLL
+	dll     *windows.DLL
+	closing atomic.Bool
+	wg      sync.WaitGroup
 
 	createAdapter    *windows.Proc
 	closeAdapter     *windows.Proc
@@ -57,10 +62,17 @@ func LoadWintun() (*Wintun, error) {
 }
 
 func (w *Wintun) Release() {
+	w.closing.Store(true)
+	w.wg.Wait()
 	w.dll.Release()
 }
 
 func (w *Wintun) callR1(proc *windows.Proc, op string, args ...uintptr) (uintptr, error) {
+	w.wg.Add(1)
+	defer w.wg.Done()
+	if w.closing.Load() {
+		return 0, os.ErrClosed
+	}
 	r1, _, e1 := proc.Call(args...)
 	if r1 == 0 {
 		if e1 != nil {
@@ -69,6 +81,15 @@ func (w *Wintun) callR1(proc *windows.Proc, op string, args ...uintptr) (uintptr
 		return 0, fmt.Errorf("%s: failed", op)
 	}
 	return r1, nil
+}
+
+func (w *Wintun) callR0(proc *windows.Proc, args ...uintptr) {
+	w.wg.Add(1)
+	defer w.wg.Done()
+	if w.closing.Load() {
+		return
+	}
+	proc.Call(args...)
 }
 
 func (w *Wintun) CreateAdapter(name string, guid *windows.GUID) (Adapter, error) {
@@ -87,7 +108,7 @@ func (w *Wintun) CreateAdapter(name string, guid *windows.GUID) (Adapter, error)
 }
 
 func (w *Wintun) CloseAdapter(a Adapter) {
-	w.closeAdapter.Call(uintptr(a))
+	w.callR0(w.closeAdapter, uintptr(a))
 }
 
 func (w *Wintun) StartSession(a Adapter, capacity uint32) (Session, error) {
@@ -96,7 +117,7 @@ func (w *Wintun) StartSession(a Adapter, capacity uint32) (Session, error) {
 }
 
 func (w *Wintun) EndSession(s Session) {
-	w.endSession.Call(uintptr(s))
+	w.callR0(w.endSession, uintptr(s))
 }
 
 func (w *Wintun) GetReadWaitEvent(s Session) (windows.Handle, error) {
@@ -111,7 +132,7 @@ func (w *Wintun) ReceivePacket(s Session) (unsafe.Pointer, uint32, error) {
 }
 
 func (w *Wintun) ReleaseReceivePacket(s Session, packet unsafe.Pointer) {
-	w.releaseReceive.Call(uintptr(s), uintptr(packet))
+	w.callR0(w.releaseReceive, uintptr(s), uintptr(packet))
 }
 
 func (w *Wintun) AllocateSendPacket(s Session, size int) (unsafe.Pointer, error) {
@@ -120,5 +141,5 @@ func (w *Wintun) AllocateSendPacket(s Session, size int) (unsafe.Pointer, error)
 }
 
 func (w *Wintun) SendPacket(s Session, packet unsafe.Pointer) {
-	w.sendPacket.Call(uintptr(s), uintptr(packet))
+	w.callR0(w.sendPacket, uintptr(s), uintptr(packet))
 }

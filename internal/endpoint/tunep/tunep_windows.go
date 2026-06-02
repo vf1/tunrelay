@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"unsafe"
 
 	"tunrelay/internal/config"
@@ -25,6 +26,9 @@ func (d *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Contex
 	for {
 		ptr, size, err := d.w.ReceivePacket(d.session)
 		if err != nil {
+			if errors.Is(err, os.ErrClosed) {
+				return nil, 0, err
+			}
 			if errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
 				event, err := d.w.GetReadWaitEvent(d.session)
 				if err != nil {
