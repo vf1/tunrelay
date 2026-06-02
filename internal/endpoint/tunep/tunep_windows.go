@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"unsafe"
 
 	"tunrelay/internal/config"
@@ -17,9 +18,10 @@ import (
 const ringCapacity = 0x400000
 
 type tunDevice struct {
-	w       *Wintun
-	adapter Adapter
-	session Session
+	w         *Wintun
+	adapter   Adapter
+	session   Session
+	closeOnce sync.Once
 }
 
 func (d *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
@@ -57,9 +59,11 @@ func (d *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Conte
 }
 
 func (d *tunDevice) Close() error {
-	d.w.EndSession(d.session)
-	d.w.CloseAdapter(d.adapter)
-	d.w.Release()
+	d.closeOnce.Do(func() {
+		d.w.EndSession(d.session)
+		d.w.CloseAdapter(d.adapter)
+		d.w.Release()
+	})
 	return nil
 }
 

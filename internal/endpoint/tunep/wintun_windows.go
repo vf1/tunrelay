@@ -14,6 +14,7 @@ type Wintun struct {
 	dll     *windows.DLL
 	closing atomic.Bool
 	wg      sync.WaitGroup
+	once    sync.Once
 
 	createAdapter    *windows.Proc
 	closeAdapter     *windows.Proc
@@ -62,9 +63,11 @@ func LoadWintun() (*Wintun, error) {
 }
 
 func (w *Wintun) Release() {
-	w.closing.Store(true)
-	w.wg.Wait()
-	w.dll.Release()
+	w.once.Do(func() {
+		w.closing.Store(true)
+		w.wg.Wait()
+		w.dll.Release()
+	})
 }
 
 func (w *Wintun) callR1(proc *windows.Proc, op string, args ...uintptr) (uintptr, error) {
