@@ -25,7 +25,7 @@ func main() {
 	}
 	defer restoreSystem()
 
-	waitForSignal()
+	waitForSigInt()
 	fmt.Println("")
 
 	slog.Info("terminating")

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"tunrelay/internal/config"
 	"tunrelay/internal/sysctl"
@@ -105,4 +107,11 @@ func setupSystem(cfg config.System) (func(), error) {
 	}
 
 	return rest, nil
+}
+
+func waitForSigInt() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch /* os.Interrupt == SIGINT */, syscall.SIGINT, syscall.SIGTERM)
+	<-ch
+	signal.Stop(ch)
 }
