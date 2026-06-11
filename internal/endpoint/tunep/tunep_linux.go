@@ -2,9 +2,10 @@ package tunep
 
 import (
 	"context"
-
+	"errors"
 	"fmt"
 	"os"
+	"syscall"
 
 	"tunrelay/internal/config"
 	"tunrelay/internal/sysctl"
@@ -17,6 +18,15 @@ type tunDevice struct {
 
 func (i *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
 	n, err := i.f.Read(p[off:])
+	if err != nil {
+		if errors.Is(err, os.ErrClosed) {
+			return ctx, 0, err
+		}
+		if errors.Is(err, syscall.EBADF) {
+			return ctx, 0, fmt.Errorf("read interrupted by close: %w: %w", os.ErrClosed, err)
+		}
+		return ctx, 0, err
+	}
 	return ctx, n, err
 }
 
