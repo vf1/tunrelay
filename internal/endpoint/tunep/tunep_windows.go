@@ -18,13 +18,18 @@ import (
 const ringCapacity = 0x400000
 
 type tunDevice struct {
-	w         *Wintun
-	adapter   Adapter
-	session   Session
-	closeOnce sync.Once
+	w          *Wintun
+	adapter    Adapter
+	session    Session
+	closeEvent windows.Handle
+	activeWg   sync.WaitGroup
+	closeOnce  sync.Once
 }
 
 func (d *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	// minor race here
+	d.activeWg.Add(1)
+	defer d.activeWg.Done()
 	for {
 		ptr, size, err := d.w.ReceivePacket(d.session)
 		if err != nil {
@@ -36,18 +41,28 @@ func (d *tunDevice) Read(ctx context.Context, p []byte, off int) (context.Contex
 				if err != nil {
 					return nil, 0, fmt.Errorf("get read wait event: %w", err)
 				}
-				windows.WaitForSingleObject(event, windows.INFINITE)
+				ev, err := windows.WaitForMultipleObjects(
+					[]windows.Handle{event, d.closeEvent}, false, windows.INFINITE)
+				if err != nil {
+					return nil, 0, fmt.Errorf("wait for read: %w", err)
+				}
+				if ev == windows.WAIT_OBJECT_0+1 {
+					return nil, 0, os.ErrClosed
+				}
 				continue
 			}
 			return nil, 0, err
 		}
-		defer d.w.ReleaseReceivePacket(d.session, ptr)
 		n := copy(p[off:], unsafe.Slice((*byte)(ptr), size))
+		d.w.ReleaseReceivePacket(d.session, ptr)
 		return ctx, n, nil
 	}
 }
 
 func (d *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Context, int, error) {
+	// minor race here
+	d.activeWg.Add(1)
+	defer d.activeWg.Done()
 	n := len(p[off:])
 	ptr, err := d.w.AllocateSendPacket(d.session, n)
 	if err != nil {
@@ -60,9 +75,12 @@ func (d *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Conte
 
 func (d *tunDevice) Close() error {
 	d.closeOnce.Do(func() {
+		windows.SetEvent(d.closeEvent)
+		d.activeWg.Wait()
 		d.w.EndSession(d.session)
 		d.w.CloseAdapter(d.adapter)
 		d.w.Release()
+		windows.CloseHandle(d.closeEvent)
 	})
 	return nil
 }
@@ -87,8 +105,17 @@ func createTun(cfg config.TunEndpoint, log Logger) (*tunDevice, error) {
 		return nil, fmt.Errorf("start session: %w", err)
 	}
 
+	closeEvent, err := windows.CreateEvent(nil, 1, 0, nil)
+	if err != nil {
+		w.EndSession(session)
+		w.CloseAdapter(adapter)
+		w.Release()
+		return nil, fmt.Errorf("create close event: %w", err)
+	}
+
 	err = tunctl.UpIface(cfg.Name, cfg.CIDR)
 	if err != nil {
+		windows.CloseHandle(closeEvent)
 		w.EndSession(session)
 		w.CloseAdapter(adapter)
 		w.Release()
@@ -96,7 +123,7 @@ func createTun(cfg config.TunEndpoint, log Logger) (*tunDevice, error) {
 	}
 
 	log.Info("interface created", "name", cfg.Name, "cidr", cfg.CIDR)
-	return &tunDevice{w: w, adapter: adapter, session: session}, nil
+	return &tunDevice{w: w, adapter: adapter, session: session, closeEvent: closeEvent}, nil
 }
 
 func nameToGUID(name string) windows.GUID {
