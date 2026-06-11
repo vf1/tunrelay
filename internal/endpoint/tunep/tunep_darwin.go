@@ -55,7 +55,7 @@ func (i *tunDevice) Write(ctx context.Context, p []byte, off int) (context.Conte
 	if err != nil {
 		return ctx, 0, err
 	}
-	return ctx, len(p) - off, nil
+	return ctx, len(p) - PrefixSize, nil
 }
 
 func (i *tunDevice) Close() error { return i.f.Close() }
