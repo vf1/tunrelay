@@ -58,7 +58,7 @@ func TestReadAfterClose(t *testing.T) {
 	d := createTestTun(t)
 	d.Close()
 
-	_, _, err := d.Read(context.Background(), make([]byte, 1500), 0)
+	_, _, err := d.Read(context.Background(), make([]byte, 1504), 4)
 	if !errors.Is(err, os.ErrClosed) {
 		t.Fatalf("expected os.ErrClosed, got: %v", err)
 	}
@@ -71,8 +71,13 @@ func TestCloseUnblocksRead(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		close(readReady)
-		_, _, err := d.Read(context.Background(), make([]byte, 1500), 0)
-		errCh <- err
+		for {
+			_, _, err := d.Read(context.Background(), make([]byte, 1504), 4)
+			if err != nil {
+				errCh <- err
+				return
+			}
+		}
 	}()
 
 	<-readReady
