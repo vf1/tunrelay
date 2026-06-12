@@ -173,17 +173,40 @@ func pingCmd(host string) *exec.Cmd {
 func TestPingRead(t *testing.T) {
 	d := createTestTun(t)
 
-	go pingCmd(testPeer).Run()
+	cmd := pingCmd(testPeer)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("ping output: %s", out)
+		t.Fatalf("ping failed: %v", err)
+	}
 
 	buf := make([]byte, bufferSize)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	deadline := time.After(3 * time.Second)
 
 	for {
-		_, n, err := d.Read(ctx, buf, bufferOffset)
-		if err != nil {
-			t.Fatalf("Read: %v", err)
+		type readResult struct {
+			n   int
+			err error
 		}
+		ch := make(chan readResult, 1)
+		go func() {
+			_, n, err := d.Read(context.Background(), buf, bufferOffset)
+			ch <- readResult{n, err}
+		}()
+
+		var n int
+		select {
+		case r := <-ch:
+			if r.err != nil {
+				t.Fatalf("Read: %v", r.err)
+			}
+			n = r.n
+		case <-deadline:
+			d.Close()
+			<-ch
+			t.Fatal("timed out waiting for ICMP packet")
+		}
+
 		pkt := buf[bufferOffset : bufferOffset+n]
 
 		ver := pkt[0] >> 4
