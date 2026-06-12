@@ -171,6 +171,30 @@ func pingCmd(host string) *exec.Cmd {
 	}
 }
 
+func netDiag() string {
+	switch runtime.GOOS {
+	case "windows":
+		var diag string
+		if out, err := exec.Command("netsh", "interface", "show", "interface").CombinedOutput(); err == nil {
+			diag += "\n--- all interfaces ---\n" + string(out)
+		}
+		if out, err := exec.Command("powershell", "-Command", "Get-NetAdapter | Format-Table Name,InterfaceDescription,Status,MacAddress -AutoSize").CombinedOutput(); err == nil {
+			diag += "\n--- net adapters ---\n" + string(out)
+		}
+		if out, err := exec.Command("ipconfig", "/all").CombinedOutput(); err == nil {
+			diag += "\n--- ipconfig ---\n" + string(out)
+		}
+		if out, err := exec.Command("route", "print", "-4").CombinedOutput(); err == nil {
+			diag += "\n--- routes ---\n" + string(out)
+		}
+		return diag
+	case "darwin":
+		return "(not implemented)"
+	default:
+		return "(not implemented)"
+	}
+}
+
 func TestPingRead(t *testing.T) {
 	d := createTestTun(t)
 
@@ -210,7 +234,7 @@ func TestPingRead(t *testing.T) {
 		case <-deadline:
 			d.Close()
 			<-ch
-			t.Fatalf("timed out waiting for ICMP packet\nping output: %s", pingOut.String())
+			t.Fatalf("timed out waiting for ICMP packet\nping output: %s%s", pingOut.String(), netDiag())
 		}
 
 		pkt := buf[bufferOffset : bufferOffset+n]
