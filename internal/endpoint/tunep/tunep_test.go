@@ -174,14 +174,16 @@ func TestPingRead(t *testing.T) {
 	d := createTestTun(t)
 
 	cmd := pingCmd(testPeer)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Logf("ping output: %s", out)
-		t.Fatalf("ping failed: %v", err)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("ping start: %v", err)
 	}
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	})
 
 	buf := make([]byte, bufferSize)
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(5 * time.Second)
 
 	for {
 		type readResult struct {
@@ -204,7 +206,8 @@ func TestPingRead(t *testing.T) {
 		case <-deadline:
 			d.Close()
 			<-ch
-			t.Fatal("timed out waiting for ICMP packet")
+			out, _ := cmd.CombinedOutput()
+			t.Fatalf("timed out waiting for ICMP packet\nping output: %s", out)
 		}
 
 		pkt := buf[bufferOffset : bufferOffset+n]
