@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"testing"
 	"time"
@@ -15,6 +17,10 @@ import (
 const (
 	bufferOffset = 16
 	bufferSize   = 2048
+
+	testLocal = "10.99.0.2"
+	testPeer  = "10.99.0.1"
+	testCIDR  = testLocal + "/24"
 )
 
 type testLog struct{}
@@ -40,8 +46,8 @@ func createTestTun(t *testing.T) *tunDevice {
 	name := fmt.Sprintf("tun%d", time.Now().UnixMilli()%10000)
 	cfg := config.TunEndpoint{
 		Name: name,
-		CIDR: "10.99.0.2/24",
-		Peer: "10.99.0.1",
+		CIDR: testCIDR,
+		Peer: testPeer,
 	}
 
 	d, err := createTun(cfg, testLog{})
@@ -114,8 +120,8 @@ func TestWriteIPv4(t *testing.T) {
 	ipHeader[7] = 0x00
 	ipHeader[8] = 64
 	ipHeader[9] = 6
-	copy(ipHeader[12:16], []byte{10, 99, 0, 1})
-	copy(ipHeader[16:20], []byte{10, 99, 0, 2})
+	copy(ipHeader[12:16], net.ParseIP(testPeer).To4())
+	copy(ipHeader[16:20], net.ParseIP(testLocal).To4())
 	ipHeader[20] = 0x00
 
 	_, n, err := d.Write(context.Background(), buf[:bufferOffset+21], bufferOffset)
@@ -150,6 +156,56 @@ func TestWriteIPv6(t *testing.T) {
 	}
 	if n != 41 {
 		t.Fatalf("Write IPv6: expected n=41, got n=%d", n)
+	}
+}
+
+func pingCmd(host string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("ping", "-n", "1", "-w", "1000", host)
+	case "darwin":
+		return exec.Command("ping", "-c", "1", "-W", "1000", host)
+	default:
+		return exec.Command("ping", "-c", "1", "-W", "1", host)
+	}
+}
+
+func TestPingRead(t *testing.T) {
+	d := createTestTun(t)
+
+	go pingCmd(testPeer).Run()
+
+	buf := make([]byte, bufferSize)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	for {
+		_, n, err := d.Read(ctx, buf, bufferOffset)
+		if err != nil {
+			t.Fatalf("Read: %v", err)
+		}
+		pkt := buf[bufferOffset : bufferOffset+n]
+
+		ver := pkt[0] >> 4
+		if ver != 4 {
+			continue
+		}
+
+		proto := pkt[9]
+		if proto != 1 {
+			continue
+		}
+
+		dst := net.IP(pkt[16:20])
+		if !dst.Equal(net.ParseIP(testPeer)) {
+			continue
+		}
+
+		totalLen := int(pkt[2])<<8 | int(pkt[3])
+		if totalLen != n {
+			t.Fatalf("IP totalLen %d != n %d", totalLen, n)
+		}
+		return
 	}
 }
 
