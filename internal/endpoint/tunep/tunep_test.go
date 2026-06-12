@@ -163,11 +163,11 @@ func TestWriteIPv6(t *testing.T) {
 func pingCmd(host string) *exec.Cmd {
 	switch runtime.GOOS {
 	case "windows":
-		return exec.Command("ping", "-n", "1", "-w", "1000", host)
+		return exec.Command("ping", "-n", "1", "-w", "1000", "-S", testLocal, host)
 	case "darwin":
-		return exec.Command("ping", "-c", "1", "-W", "1000", host)
+		return exec.Command("ping", "-c", "1", "-W", "1000", "-S", testLocal, host)
 	default:
-		return exec.Command("ping", "-c", "1", "-W", "1", host)
+		return exec.Command("ping", "-c", "1", "-W", "1", "-I", testLocal, host)
 	}
 }
 
