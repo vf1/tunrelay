@@ -196,6 +196,10 @@ func netDiag() string {
 }
 
 func TestPingRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("can not add/up interface in test env")
+		return
+	}
 	d := createTestTun(t)
 
 	cmd := pingCmd(testPeer)
