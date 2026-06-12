@@ -1,6 +1,7 @@
 package tunep
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -174,6 +175,9 @@ func TestPingRead(t *testing.T) {
 	d := createTestTun(t)
 
 	cmd := pingCmd(testPeer)
+	var pingOut bytes.Buffer
+	cmd.Stdout = &pingOut
+	cmd.Stderr = &pingOut
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("ping start: %v", err)
 	}
@@ -206,8 +210,7 @@ func TestPingRead(t *testing.T) {
 		case <-deadline:
 			d.Close()
 			<-ch
-			out, _ := cmd.CombinedOutput()
-			t.Fatalf("timed out waiting for ICMP packet\nping output: %s", out)
+			t.Fatalf("timed out waiting for ICMP packet\nping output: %s", pingOut.String())
 		}
 
 		pkt := buf[bufferOffset : bufferOffset+n]
