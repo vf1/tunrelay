@@ -67,6 +67,16 @@ func TestCreateClose(t *testing.T) {
 	}
 }
 
+func TestDoubleClose(t *testing.T) {
+	d, _ := createTestTun(t)
+	if err := d.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := d.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("second Close: expected nil or os.ErrClosed, got %v", err)
+	}
+}
+
 func TestReadAfterClose(t *testing.T) {
 	d, _ := createTestTun(t)
 	d.Close()
@@ -104,6 +114,20 @@ func TestCloseUnblocksRead(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Read did not unblock after Close")
+	}
+}
+
+func TestWriteAfterClose(t *testing.T) {
+	d, _ := createTestTun(t)
+	if err := d.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	buf := make([]byte, bufferSize)
+	buf[bufferOffset] = 0x45
+	_, _, err := d.Write(context.Background(), buf[:bufferOffset+1], bufferOffset)
+	if err == nil {
+		t.Fatal("expected error writing to closed TUN, got nil")
 	}
 }
 
