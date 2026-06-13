@@ -21,7 +21,7 @@ type Egress struct {
 	pass      string
 	allowSrc  netip.Prefix
 	allowIPv6 bool
-	reconnect bool
+	restore   bool
 	log       Logger
 }
 
@@ -46,6 +46,7 @@ func NewEgress(cfg config.UDPEgress, log Logger) (*Egress, error) {
 		pass:      cfg.Password,
 		allowSrc:  allowSrc,
 		allowIPv6: cfg.AllowIPv6,
+		restore:   true,
 		log:       log,
 	}, nil
 }
@@ -60,12 +61,9 @@ func (e *Egress) Read(ctx context.Context, b []byte, off int) (context.Context, 
 		n, err := conn.Read(b[off:])
 		if err != nil {
 			e.mu.Lock()
-			reconnect := e.reconnect
-			if reconnect {
-				e.reconnect = false
-			}
+			restore := e.restore
 			e.mu.Unlock()
-			if reconnect {
+			if restore {
 				continue
 			}
 		}
@@ -148,11 +146,11 @@ func (e *Egress) Close() error {
 	return e.close(false)
 }
 
-func (e *Egress) close(reconnect bool) error {
+func (e *Egress) close(restore bool) error {
 	e.mu.Lock()
 	conn := e.conn
 	e.conn = nil
-	e.reconnect = reconnect
+	e.restore = restore
 	e.mu.Unlock()
 	if conn == nil {
 		return nil
@@ -167,6 +165,9 @@ func (_ *Egress) Name() string {
 func (e *Egress) connect() (*net.UDPConn, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if !e.restore {
+		return nil, net.ErrClosed
+	}
 	if e.conn != nil {
 		return e.conn, nil
 	}
