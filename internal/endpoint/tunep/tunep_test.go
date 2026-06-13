@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func (testLog) Info(msg string, args ...any) {
 	fmt.Println()
 }
 
-func createTestTun(t *testing.T) *tunDevice {
+func createTestTun(t *testing.T) (*tunDevice, string) {
 	t.Helper()
 	if !isAdmin() {
 		t.Skip("requires elevated privileges")
@@ -56,18 +57,18 @@ func createTestTun(t *testing.T) *tunDevice {
 		t.Fatalf("createTun: %v", err)
 	}
 	t.Cleanup(func() { d.Close() })
-	return d
+	return d, name
 }
 
 func TestCreateClose(t *testing.T) {
-	d := createTestTun(t)
+	d, _ := createTestTun(t)
 	if err := d.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 }
 
 func TestReadAfterClose(t *testing.T) {
-	d := createTestTun(t)
+	d, _ := createTestTun(t)
 	d.Close()
 
 	_, _, err := d.Read(context.Background(), make([]byte, bufferSize), bufferOffset)
@@ -77,7 +78,7 @@ func TestReadAfterClose(t *testing.T) {
 }
 
 func TestCloseUnblocksRead(t *testing.T) {
-	d := createTestTun(t)
+	d, _ := createTestTun(t)
 
 	readReady := make(chan struct{})
 	errCh := make(chan error, 1)
@@ -107,7 +108,7 @@ func TestCloseUnblocksRead(t *testing.T) {
 }
 
 func TestWriteIPv4(t *testing.T) {
-	d := createTestTun(t)
+	d, _ := createTestTun(t)
 	buf := make([]byte, bufferSize)
 
 	ipHeader := buf[bufferOffset:]
@@ -135,7 +136,7 @@ func TestWriteIPv4(t *testing.T) {
 }
 
 func TestWriteIPv6(t *testing.T) {
-	d := createTestTun(t)
+	d, _ := createTestTun(t)
 	buf := make([]byte, bufferSize)
 
 	ipHeader := buf[bufferOffset:]
@@ -171,6 +172,28 @@ func pingCmd(host string) *exec.Cmd {
 	}
 }
 
+func waitTunFunctional(name, localIP string, timeout time.Duration) bool {
+	if runtime.GOOS != "windows" {
+		return true
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		out, err := exec.Command("netsh", "interface", "show", "interface", "name="+name).CombinedOutput()
+		if err != nil || !strings.Contains(string(out), name) {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		out, err = exec.Command("netsh", "interface", "ip", "show", "address", "name="+name).CombinedOutput()
+		if err == nil && strings.Contains(string(out), localIP) {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
 func netDiag() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -196,11 +219,11 @@ func netDiag() string {
 }
 
 func TestPingRead(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("can not add/up interface in test env")
-		return
+	d, name := createTestTun(t)
+
+	if runtime.GOOS == "windows" && !waitTunFunctional(name, testLocal, 3*time.Second) {
+		t.Skip("TUN adapter is not visible or has no address; environment likely restricts TUN")
 	}
-	d := createTestTun(t)
 
 	cmd := pingCmd(testPeer)
 	var pingOut bytes.Buffer
@@ -270,7 +293,7 @@ func TestWriteInvalidVersion(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("version check is darwin-only")
 	}
-	d := createTestTun(t)
+	d, _ := createTestTun(t)
 	buf := make([]byte, bufferSize)
 
 	buf[bufferOffset] = 0x00
