@@ -45,7 +45,7 @@ func NewRelays(cfg []config.Relay, log Logger) (*Relay, error) {
 		for _, closer := range closers {
 			err := closer.Close()
 			if err != nil {
-				log.Error("cleanup failed new relay: %w", err)
+				log.Error("cleanup failed new relay: %v", err)
 			}
 		}
 	}()
@@ -128,14 +128,14 @@ pipe:
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
 			}
-			log.Error(fmt.Sprintf("%v read: %v", a.Name(), err))
+			log.Error("%v read: %v", a.Name(), err)
 			continue
 		}
 
 		for _, mw := range middlewares {
 			ctx, err = mw.Process(ctx, buf[BufferOffset:BufferOffset+n])
 			if err != nil {
-				log.Error(fmt.Sprintf("%v process: %v", mw.Name(), err))
+				log.Error("%v process: %v", mw.Name(), err)
 				continue pipe
 			}
 		}
@@ -145,7 +145,7 @@ pipe:
 			if errors.Is(err, os.ErrClosed) || errors.Is(err, net.ErrClosed) {
 				return
 			}
-			log.Error(fmt.Sprintf("%v write: %v", b.Name(), err))
+			log.Error("%v write: %v", b.Name(), err)
 			continue
 		}
 	}

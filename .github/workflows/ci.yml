@@ -44,3 +44,6 @@ jobs:
 
       - name: Run iptool tests
         run: go test -v ./internal/iptool/
+
+      - name: Run relay tests
+        run: go test -v ./internal/relay/
