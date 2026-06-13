@@ -236,3 +236,28 @@ func TestIngressWriteTooSmall(t *testing.T) {
 		t.Fatalf("expected ErrSmallPacket, got: %v", err)
 	}
 }
+
+func TestIngressCloseStopsRead(t *testing.T) {
+	i := newTestIngress(t, []config.Peer{
+		{SAddr: "10.0.0.1", Password: "secret"},
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 1500)
+		_, _, err := i.Read(context.Background(), buf, 0)
+		errCh <- err
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	i.Close()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("expected error after close, got nil")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Read did not return after Close")
+	}
+}
