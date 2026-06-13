@@ -2,6 +2,7 @@ package udpep
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -30,6 +31,34 @@ func newTestEgress(t *testing.T) (*Egress, *net.UDPConn) {
 	return e, server
 }
 
+func TestReadReturnsErrorOnClose(t *testing.T) {
+	e, _ := newTestEgress(t)
+
+	_, err := e.connect()
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+
+	readDone := make(chan error, 1)
+	buf := make([]byte, 1500)
+	go func() {
+		_, _, err := e.Read(context.Background(), buf, 0)
+		readDone <- err
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	e.Close()
+
+	select {
+	case err := <-readDone:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("expected net.ErrClosed, got: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Read should return after Close, but it didn't")
+	}
+}
+
 func TestReadDoesNotReturnOnReconnect(t *testing.T) {
 	e, _ := newTestEgress(t)
 
@@ -45,6 +74,7 @@ func TestReadDoesNotReturnOnReconnect(t *testing.T) {
 		readDone <- err
 	}()
 
+	time.Sleep(100 * time.Millisecond)
 	e.close(true)
 
 	select {
