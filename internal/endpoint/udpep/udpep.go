@@ -25,12 +25,14 @@ var (
 )
 
 const (
-	HashSize        = md5.Size
-	HeaderSize      = 4 + HashSize
-	MaxTimeDiff     = 4 // seconds
-	UDPTimeout      = 10 * time.Second
-	WriteRetries    = 8
-	WriteRetryDelay = 32 * time.Millisecond
+	HashSize              = md5.Size
+	HeaderSize            = 4 + HashSize
+	MaxTimeDiff           = 4 // seconds
+	UDPTimeout            = 10 * time.Second
+	WriteRetries          = 8
+	WriteRetryDelay       = 32 * time.Millisecond
+	ReconnectRetries      = 64
+	ReconnectRetryDelay   = 500 * time.Millisecond
 )
 
 func pack(b []byte, pass string) (net.Buffers, error) {

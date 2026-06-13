@@ -21,6 +21,7 @@ type Egress struct {
 	pass      string
 	allowSrc  netip.Prefix
 	allowIPv6 bool
+	reconnect bool
 	log       Logger
 }
 
@@ -50,21 +51,30 @@ func NewEgress(cfg config.UDPEgress, log Logger) (*Egress, error) {
 }
 
 func (e *Egress) Read(ctx context.Context, b []byte, off int) (context.Context, int, error) {
-	conn, err := e.connect()
-	if err != nil {
-		return ctx, 0, fmt.Errorf("connect: %w", err)
-	}
+	for {
+		conn, err := e.connect()
+		if err != nil {
+			return ctx, 0, fmt.Errorf("connect: %w", err)
+		}
 
-	n, err := conn.Read(b[off:])
-	return ctx, n, err
+		n, err := conn.Read(b[off:])
+		if err != nil {
+			e.mu.Lock()
+			reconnect := e.reconnect
+			if reconnect {
+				e.reconnect = false
+			}
+			e.mu.Unlock()
+			if reconnect {
+				continue
+			}
+		}
+		return ctx, n, err
+	}
 }
 
 func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context, int, error) {
 	p := b[off:]
-	conn, err := e.connect()
-	if err != nil {
-		return ctx, 0, fmt.Errorf("connect: %w", err)
-	}
 
 	if !iptool.CanGetVersion(p) {
 		return ctx, 0, fmt.Errorf("can not get ip version")
@@ -96,32 +106,34 @@ func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context,
 	}
 
 	var n int64
-	retry := 0
-	delay := WriteRetryDelay
-	defer conn.SetDeadline(time.Time{})
+	var r retry
 	for {
+		conn, err := e.connect()
+		if err != nil {
+			return ctx, 0, fmt.Errorf("connect: %w", err)
+		}
+
 		conn.SetDeadline(time.Now().Add(UDPTimeout))
 		n, err = bb.WriteTo(conn)
 		if err == nil {
+			conn.SetDeadline(time.Time{})
 			break
 		}
 		if errno, ok := errors.AsType[syscall.Errno](err); ok {
 			switch errno {
 			case syscall.ENOBUFS:
-				e.log.Warn("ENOBUFS", "retry", retry+1, "sleep", delay)
-				time.Sleep(delay)
-				retry += 1
-				delay *= 2
-				if retry >= WriteRetries {
-					return ctx, 0, fmt.Errorf("resend on ENOBUFS attemps exceed: %w", err)
+				e.log.Warn("ENOBUFS", "retry", r.count+1, "sleep", r.delay)
+				sleep(&r, errno, WriteRetryDelay)
+				if r.count >= WriteRetries {
+					return ctx, 0, fmt.Errorf("resend on ENOBUFS attempts exceed: %w", err)
 				}
 			case syscall.EADDRNOTAVAIL:
-				e.log.Warn("close broken connection", "errno", errno)
-				closeErr := e.Close()
-				if closeErr != nil {
-					err = errors.Join(err, closeErr)
+				e.log.Warn("close broken connection", "errno", errno, "retry", r.count+1, "sleep", r.delay)
+				sleep(&r, errno, ReconnectRetryDelay)
+				e.close(true)
+				if r.count >= ReconnectRetries {
+					return ctx, 0, fmt.Errorf("reconnect on EADDRNOTAVAIL attempts exceed: %w", err)
 				}
-				fallthrough
 			default:
 				return ctx, 0, err
 			}
@@ -129,13 +141,18 @@ func (e *Egress) Write(ctx context.Context, b []byte, off int) (context.Context,
 			return ctx, 0, err
 		}
 	}
-	return ctx, int(n), err
+	return ctx, int(n), nil
 }
 
 func (e *Egress) Close() error {
+	return e.close(false)
+}
+
+func (e *Egress) close(reconnect bool) error {
 	e.mu.Lock()
 	conn := e.conn
 	e.conn = nil
+	e.reconnect = reconnect
 	e.mu.Unlock()
 	if conn == nil {
 		return nil
@@ -165,4 +182,22 @@ func (e *Egress) connect() (*net.UDPConn, error) {
 
 	e.conn = conn
 	return e.conn, nil
+}
+
+type retry struct {
+	errno syscall.Errno
+	count int
+	delay time.Duration
+}
+
+func sleep(r *retry, errno syscall.Errno, initDelay time.Duration) {
+	if r.errno != errno {
+		*r = retry{errno: errno}
+	}
+	if r.delay == 0 {
+		r.delay = initDelay
+	}
+	time.Sleep(r.delay)
+	r.count++
+	r.delay *= 2
 }
