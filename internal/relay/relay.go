@@ -27,6 +27,53 @@ type Logger interface {
 	Error(msg string, args ...any)
 }
 
+type Factory interface {
+	NewIngress(config.IngressEndpoint, Logger) (Endpoint, error)
+	NewEgress(config.EgressEndpoint, Logger) (Endpoint, error)
+	NewMiddleware(config.Middleware, Logger) (Middleware, error)
+}
+
+type defaultFactory struct{}
+
+var DefaultFactory Factory = defaultFactory{}
+
+func (defaultFactory) NewIngress(cfg config.IngressEndpoint, log Logger) (Endpoint, error) {
+	switch ep := cfg.Value.(type) {
+	case config.TunIngress:
+		return tunep.NewIngress(ep, log)
+	case config.UDPIngress:
+		return udpep.NewIngress(ep, log)
+	case config.NullEndpoint:
+		return nullep.NewEndpoint("null ingress", log), nil
+	default:
+		return nil, fmt.Errorf("unknown ingress type")
+	}
+}
+
+func (defaultFactory) NewEgress(cfg config.EgressEndpoint, log Logger) (Endpoint, error) {
+	switch ep := cfg.Value.(type) {
+	case config.TunEgress:
+		return tunep.NewEgress(ep, log)
+	case config.UDPEgress:
+		return udpep.NewEgress(ep, log)
+	case config.NullEndpoint:
+		return nullep.NewEndpoint("null egress", log), nil
+	default:
+		return nil, fmt.Errorf("unknown egress type")
+	}
+}
+
+func (defaultFactory) NewMiddleware(cfg config.Middleware, log Logger) (Middleware, error) {
+	switch m := cfg.Value.(type) {
+	case config.ReplaceIP:
+		return replaceip.NewReplaceIP(m, log)
+	case config.NAT:
+		return nat.NewNAT(m, log)
+	default:
+		return nil, fmt.Errorf("unknown middleware type")
+	}
+}
+
 type Relay struct {
 	items []item
 	log   Logger
@@ -38,7 +85,7 @@ type item struct {
 	middlewares []Middleware
 }
 
-func NewRelays(cfg []config.Relay, log Logger) (*Relay, error) {
+func NewRelays(cfg []config.Relay, log Logger, f Factory) (*Relay, error) {
 	relay := Relay{items: make([]item, len(cfg)), log: log}
 	closers := relay.items
 	defer func() {
@@ -53,20 +100,20 @@ func NewRelays(cfg []config.Relay, log Logger) (*Relay, error) {
 	for i := len(cfg) - 1; i >= 0; i-- {
 		relayCfg := cfg[i]
 		var err error
-		ingress, err := createIngress(relayCfg.Ingress, log)
+		ingress, err := f.NewIngress(relayCfg.Ingress, log)
 		if err != nil {
 			return nil, fmt.Errorf("create ingress: %w", err)
 		}
 		relay.items[i].ingress = ingress
 
-		egress, err := createEgress(relayCfg.Egress, log)
+		egress, err := f.NewEgress(relayCfg.Egress, log)
 		if err != nil {
 			return nil, fmt.Errorf("create egress: %w", err)
 		}
 		relay.items[i].egress = egress
 
 		for _, middlewareCfg := range relayCfg.Middlewares {
-			mw, err := createMiddleware(middlewareCfg, log)
+			mw, err := f.NewMiddleware(middlewareCfg, log)
 			if err != nil {
 				return nil, fmt.Errorf("create middleware: %w", err)
 			}
@@ -158,45 +205,8 @@ type Endpoint interface {
 	Name() string
 }
 
-func createIngress(cfg config.IngressEndpoint, log Logger) (Endpoint, error) {
-	switch ep := cfg.Value.(type) {
-	case config.TunIngress:
-		return tunep.NewIngress(ep, log)
-	case config.UDPIngress:
-		return udpep.NewIngress(ep, log)
-	case config.NullEndpoint:
-		return nullep.NewEndpoint("null ingress", log), nil
-	default:
-		return nil, fmt.Errorf("unknown ingress type")
-	}
-}
-
-func createEgress(cfg config.EgressEndpoint, log Logger) (Endpoint, error) {
-	switch ep := cfg.Value.(type) {
-	case config.TunEgress:
-		return tunep.NewEgress(ep, log)
-	case config.UDPEgress:
-		return udpep.NewEgress(ep, log)
-	case config.NullEndpoint:
-		return nullep.NewEndpoint("null egress", log), nil
-	default:
-		return nil, fmt.Errorf("unknown egress type")
-	}
-}
-
 type Middleware interface {
 	Forward(ctx context.Context, packet []byte) (context.Context, error)
 	Backward(ctx context.Context, packet []byte) (context.Context, error)
 	Name() string
-}
-
-func createMiddleware(cfg config.Middleware, log Logger) (Middleware, error) {
-	switch m := cfg.Value.(type) {
-	case config.ReplaceIP:
-		return replaceip.NewReplaceIP(m, log)
-	case config.NAT:
-		return nat.NewNAT(m, log)
-	default:
-		return nil, fmt.Errorf("unknown middleware type")
-	}
 }

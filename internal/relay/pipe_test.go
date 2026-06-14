@@ -26,6 +26,7 @@ type mockEndpoint struct {
 	written chan []byte
 	closing chan struct{}
 	closeOnce sync.Once
+	closed    atomic.Bool
 
 	mu       sync.Mutex
 	writeErr error
@@ -68,6 +69,7 @@ func (m *mockEndpoint) Write(_ context.Context, p []byte, off int) (context.Cont
 }
 
 func (m *mockEndpoint) Close() error {
+	m.closed.Store(true)
 	m.closeOnce.Do(func() { close(m.closing) })
 	return nil
 }

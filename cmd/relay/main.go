@@ -14,7 +14,7 @@ func main() {
 		fatal("get config", err)
 	}
 
-	relays, err := relay.NewRelays(cfg.Relays, slog.Default())
+	relays, err := relay.NewRelays(cfg.Relays, slog.Default(), relay.DefaultFactory)
 	if err != nil {
 		fatal("create relays", err)
 	}
