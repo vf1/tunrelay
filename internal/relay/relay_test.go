@@ -148,6 +148,32 @@ func TestNewRelaysCreateError(t *testing.T) {
 	}
 }
 
+func TestNewRelaysCleanupOnMiddlewareError(t *testing.T) {
+	ingressEp := newMockEndpoint("mock-ingress")
+	egressEp := newMockEndpoint("mock-egress")
+	f := defaultMockFactory()
+	f.ingress = func(_ config.IngressEndpoint, _ Logger) (Endpoint, error) {
+		return ingressEp, nil
+	}
+	f.egress = func(_ config.EgressEndpoint, _ Logger) (Endpoint, error) {
+		return egressEp, nil
+	}
+	f.middleware = func(_ config.Middleware, _ Logger) (Middleware, error) {
+		return nil, errTest
+	}
+
+	_, err := NewRelays([]config.Relay{nullRelayWithMiddleware()}, &testLogger{}, f)
+	if !errors.Is(err, errTest) {
+		t.Fatalf("expected error wrapping %v, got %v", errTest, err)
+	}
+	if !ingressEp.closed.Load() {
+		t.Fatal("expected ingress to be closed on middleware error")
+	}
+	if !egressEp.closed.Load() {
+		t.Fatal("expected egress to be closed on middleware error")
+	}
+}
+
 func TestNewRelaysCleanupOnError(t *testing.T) {
 	ep := newMockEndpoint("mock-ingress")
 	f := defaultMockFactory()
