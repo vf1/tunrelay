@@ -20,3 +20,10 @@ multi_client: build
 
 client: build
   cd bin && ./tunrelay --config=../config/client.yaml
+
+test:
+  # sudo requred for some tunep test
+  go test ./internal/endpoint/tunep/
+  go test ./internal/endpoint/udpep/
+  go test ./internal/iptool/
+  go test ./internal/relay/
